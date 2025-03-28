@@ -1,0 +1,117 @@
+<!-- stopwatch.html 主页面 -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>本地网页秒表</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="timer.js"></script>
+  <script defer src="ruleTable.js"></script>
+  <script defer src="memoParser.js"></script>
+  <script defer src="exportTomato.js"></script>
+  <style>
+    #lang-toggle {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
+  <h1 data-zh="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
+  <div class="tabs">
+    <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-en="Timer">计时器</button>
+    <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义Memo解析规则" data-en="Memo Parsing Rules">定义Memo解析规则</button>
+    <button class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-en="Tomato Export">番茄土豆格式导出</button>
+    <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志" data-en="Log">运行日志</button>
+  </div>
+
+  <div id="tab-timer" class="tab-content">
+    <section id="display-section">
+      <h2 data-zh="当前Interval持续时间" data-en="Current Interval Duration">当前Interval持续时间</h2>
+      <div id="current-duration" class="big-time">00:00:00.00</div>
+      <div class="sub-time" id="current-date"></div>
+
+      <h2 data-zh="当前绝对时间" data-en="Current Absolute Time">当前绝对时间</h2>
+      <div id="absolute-time" class="big-time">--:--:--</div>
+      <div class="sub-time" id="absolute-date"></div>
+
+      <h2 data-zh="第一个Interval开始的时间" data-en="First Interval Start Time">第一个Interval开始的时间</h2>
+      <div id="initial-time" class="big-time">--:--:--</div>
+      <div class="sub-time" id="initial-date"></div>
+    </section>
+
+    <section id="control-section">
+      <input id="memo-input" placeholder="当前 interval 的备注..." maxlength="1000">
+      <button onclick="rememberInterval()" data-zh="📌 记下" data-en="📌 Remember">📌 记下</button>
+      <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
+      <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
+    </section>
+
+    <section id="intervals-section">
+      <h2 data-zh="历史记录" data-en="History">历史记录</h2>
+      <div id="intervals-container"></div>
+    </section>
+  </div>
+
+  <div id="tab-rules" class="tab-content" style="display:none">
+    <h2 data-zh="Memo解析规则" data-en="Memo Parsing Rules">Memo解析规则</h2>
+    <button onclick="showRuleHelp()" data-zh="📖 使用方法" data-en="📖 Help">📖 使用方法</button>
+    <button onclick="exportRules()" data-zh="📤 导出规则" data-en="📤 Export Rules">📤 导出规则</button>
+    <input type="file" id="import-rule-file" accept=".csv" onchange="importRules(event)">
+    <button onclick="undoClearRules()" data-zh="↩️ 撤销清空规则" data-en="↩️ Undo Clear">↩️ 撤销清空规则</button>
+    <table id="rule-table"></table>
+  </div>
+
+  <div id="tab-export" class="tab-content" style="display:none">
+    <h2 data-zh="🍅 导出番茄土豆格式" data-en="🍅 Tomato Export">🍅 导出番茄土豆格式</h2>
+    <button onclick="exportTomatoPotato()" data-zh="📋 生成并复制" data-en="📋 Generate & Copy">📋 生成并复制</button>
+    <div id="tomato-output"></div>
+  </div>
+
+  <div id="tab-log" class="tab-content" style="display:none">
+    <h2 data-zh="🛠️ 运行日志" data-en="🛠️ Log">🛠️ 运行日志</h2>
+    <button onclick="refreshLog()" data-zh="🔄 刷新日志" data-en="🔄 Refresh Log">🔄 刷新日志</button>
+    <button onclick="copyLog()" data-zh="📋 复制日志" data-en="📋 Copy Log">📋 复制日志</button>
+    <button onclick="clearLog()" data-zh="🗑️ 清空日志" data-en="🗑️ Clear Log">🗑️ 清空日志</button>
+    <pre id="log-content"></pre>
+  </div>
+
+  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:#fff; border:1px solid #ccc; position:fixed; top:30%; left:30%; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.2);">
+    <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
+    <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
+    <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
+  </div>
+
+  <footer>
+    <hr>
+    <small>参考了原网页https://stopwatch.online-timers.com/stopwatch-with-time-intervals的功能，由 ChatGPT 重新编写代码并添加了个性化修改</small>
+  </footer>
+
+  <script>
+    let currentLang = 'zh';
+    function showTab(id) {
+      document.querySelectorAll('.tab-content').forEach(div => div.style.display = 'none');
+      document.getElementById(id).style.display = 'block';
+    }
+    function confirmExportAndClear() {
+      document.getElementById('confirm-clear-dialog').style.display = 'block';
+    }
+    function exportThenClear() {
+      exportIntervalsToCSV();
+      intervals = [];
+      localStorage.setItem('intervals', JSON.stringify(intervals));
+      document.getElementById('intervals-container').innerHTML = '';
+      document.getElementById('confirm-clear-dialog').style.display = 'none';
+    }
+    function toggleLang() {
+      currentLang = currentLang === 'zh' ? 'en' : 'zh';
+      document.querySelectorAll('[data-zh]').forEach(el => {
+        el.textContent = el.getAttribute('data-' + currentLang);
+      });
+      document.getElementById('lang-toggle').textContent = currentLang === 'zh' ? '🌐 English' : '🌐 中文';
+    }
+  </script>
+</body>
+</html>
