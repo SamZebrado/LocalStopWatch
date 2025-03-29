@@ -66,8 +66,20 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
    Use export buttons to get CSV, tomato format, or logs  
 4. 点击右上角按钮切换中英文界面  
    Switch UI language via the top-right button  
-5. 如需重新打包合并 HTML，可运行 `combine_html.m`  （目前故障，但是我准备了一个手动整合的版本“stopwatchMergedManually.html”；安卓手机上测试计时和导出功能可以运行，但是）
-   If you wish to repackage the HTML, run `combine_html.m` （has bug; to be debugged later; but I've uploaded a manually merged one， “stopwatchMergedManually.html”）
+5. 我已上传一个手动整合版本：`stopwatchMergedManually.html`，可直接下载并在其他设备（例如手机）独立使用，无需单独下载其他 js 文件  
+   I've uploaded a manually merged version: `stopwatchMergedManually.html`, which you can download and use directly on other devices (e.g. your phone), without needing separate JS files.
+
+   在红米 K50 手机上测试，计时与导出功能运行正常；但系统自带浏览器无法解析 Memo 内容，  
+   Tested on a Redmi K50: timing and export features work fine, but the default browser fails to parse memos.
+
+   改用 QQ 浏览器后所有功能均可正常使用，看来确实是浏览器兼容性的问题。  
+   Switching to QQ Browser fixed everything—so it seems to be a browser compatibility issue.
+
+   原本我打算使用 `combine_html.m`（一个 MATLAB 脚本，也应该可以在 Octave 中运行）来自动整合网页内容，  
+   I originally planned to use `combine_html.m` (a MATLAB script that should also work in Octave) to automate the merging.
+
+   但脚本目前还有 bug，暂时没修，有空再说吧（逃）🧩  
+   But the script still has a bug—I haven’t fixed it yet. Maybe later… 😅
 
 ---
 
