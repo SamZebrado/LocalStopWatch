@@ -66,8 +66,8 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
    Use export buttons to get CSV, tomato format, or logs  
 4. 点击右上角按钮切换中英文界面  
    Switch UI language via the top-right button  
-5. 如需重新打包合并 HTML，可运行 `combine_html.m`  
-   If you wish to repackage the HTML, run `combine_html.m`
+5. 如需重新打包合并 HTML，可运行 `combine_html.m`  （目前故障，但是我准备了一个手动整合的版本“stopwatchMergedManually.html”；安卓手机上测试计时和导出功能可以运行，但是）
+   If you wish to repackage the HTML, run `combine_html.m` （has bug; to be debugged later; but I've uploaded a manually merged one， “stopwatchMergedManually.html”）
 
 ---
 
