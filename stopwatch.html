@@ -94,8 +94,6 @@
   </footer>
 
   <script>
-    let currentLang = 'zh';
-    const langCycle = ['zh', 'mix', 'en'];
     function showTab(id) {
       document.querySelectorAll('.tab-content').forEach(div => div.style.display = 'none');
       document.getElementById(id).style.display = 'block';
@@ -110,17 +108,39 @@
       document.getElementById('intervals-container').innerHTML = '';
       document.getElementById('confirm-clear-dialog').style.display = 'none';
     }
-    function toggleLang() {
-      const idx = langCycle.indexOf(currentLang);
-      const nextLang = langCycle[(idx + 1) % langCycle.length];
-      currentLang = nextLang;
-      document.querySelectorAll('[data-zh]').forEach(el => {
-        const val = el.getAttribute('data-' + currentLang);
-        if (val) el.textContent = val;
-      });
-      const label = currentLang === 'zh' ? '🌐 English' : currentLang === 'mix' ? '🌐 中文+English' : '🌐 中文';
-      document.getElementById('lang-toggle').textContent = label;
-    }
+  // 初始化语言状态（优先从 localStorage 读取）
+  let currentLang = localStorage.getItem('lang') || 'mix';
+  const langCycle = ['zh', 'mix', 'en'];
+
+  function updateLangUI() {
+    document.querySelectorAll('[data-zh]').forEach(el => {
+      const val = el.getAttribute('data-' + currentLang);
+      if (val) el.textContent = val;
+    });
+
+    // 按钮显示下一个语言名称
+    const idx = langCycle.indexOf(currentLang);
+    const nextLang = langCycle[(idx + 1) % langCycle.length];
+    
+    
+    const labelMap = {
+      zh: '🌐 中文',//这样能与“下一个”语言一致
+      mix: '🌐 中文+English',
+      en: '🌐 English'
+    };
+    document.getElementById('lang-toggle').textContent = labelMap[nextLang];
+  }
+
+  function toggleLang() {
+    const idx = langCycle.indexOf(currentLang);
+    currentLang = langCycle[(idx + 1) % langCycle.length];
+    localStorage.setItem('lang', currentLang);
+    updateLangUI();
+  }
+
+  // 页面加载后应用语言
+  document.addEventListener('DOMContentLoaded', updateLangUI);
+
   </script>
 </body>
 </html>

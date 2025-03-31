@@ -50,7 +50,7 @@ function exportIntervalsToCSV() {
   const a = document.createElement('a');
 
   const now = new Date();
-  const filename = `导出 ${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
+  const filename = `${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
 
   a.href = url;
   a.download = filename;
@@ -183,12 +183,16 @@ window.onload = () => {
   localStorage.setItem('logs', JSON.stringify(logs));
   updateLogDisplay();
 
-  const parseAllBtn = document.createElement('button');
-  parseAllBtn.textContent = '解析全部';
-  parseAllBtn.onclick = () => {
-    intervals.forEach((_, i) => parseMemo(i));
-  };
-  document.getElementById('interval-controls')?.appendChild(parseAllBtn);
+const parseAllBtn = document.createElement('button');
+parseAllBtn.setAttribute('data-zh', '解析全部');
+parseAllBtn.setAttribute('data-mix', '解析全部 / Parse All');
+parseAllBtn.setAttribute('data-en', 'Parse All');
+parseAllBtn.textContent = getI18n('parseAll');
+parseAllBtn.onclick = () => {
+  intervals.forEach((_, i) => parseMemo(i));
+};
+document.getElementById('interval-controls')?.appendChild(parseAllBtn);
+
 };
 
 

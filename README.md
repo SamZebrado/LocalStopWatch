@@ -81,6 +81,62 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
    但脚本目前还有 bug，暂时没修，有空再说吧（逃）🧩  
    But the script still has a bug—I haven’t fixed it yet. Maybe later… 😅
 
+## 🔧 最近更新（Recent Updates） 4.1.2025 lol
+
+花了好多时间，太可怕了，我感觉有点像恶性成瘾了，希望我的学习和研究也能有这股劲头……
+
+I've spent way too much time on this... borderline addicted. I hope I can bring this level of obsession to my research and studies someday. 😅
+
+### 🈶 多语言按钮增强（Improved Multilingual UI）
+
+- 所有功能按钮支持三种语言切换（中文 / 混合 / 英文）；
+- “解析全部”按钮已加入多语言系统，显示随语言自动更新；
+- 切换按钮状态始终显示“下一个语言”的名字，避免混淆。
+
+- All action buttons now support three language modes: Chinese / Mixed / English;
+- The “Parse All” button is now included in the multilingual system and updates dynamically;
+- The language toggle button now clearly shows the **next** language to switch to.
+
+### 🧠 标签解析增强（Smarter Tag Parsing）
+
+- **支持 Memo 尾部数字自动提取为指定时间**（如 “洗脚 3” 会将 `3` 分钟设置为指定时长）；
+- **感叹号关键词（如 `!sp`）** 只在 Memo 末尾生效，支持连续出现多个，全部会被删除；
+- **否定关键词（如 `~morning`）** 与普通关键词同权，不再优先处理；
+- **感叹号关键词命中时如果尚未添加标签，将自动补加该列标签**；
+- **普通关键词不再被删除，仅作为标记依据**；
+- **空格不再是关键词识别的必要条件**，支持连写识别（如 `lfmdc` 命中多个关键词）；
+- **memo 会根据匹配顺序从左至右逐一剔除关键词，避免重叠标签重复命中**。
+
+- **Memo suffix numbers are now parsed as duration** (e.g., “洗脚 3” becomes 3 minutes);
+- **Exclamation mark keywords (like `!sp`)** are matched only at the memo suffix, and all matches are deleted;
+- **Negation keywords (like `~morning`)** are no longer prioritized over others—they're checked equally;
+- If an exclamation keyword matches but its tag hasn't yet been added, the tag will now be included;
+- **Normal keywords are never deleted**—they only act as matching cues;
+- **Spaces between keywords are no longer required**—concatenated suffixes like `lfmdc` will still match multiple tags;
+- Keywords are parsed **from left to right**, ensuring no repeated matches from overlapping segments.
+
+### 💾 数据安全增强（Backup & Conflict Protection）
+
+- **增加自动与手动备份机制**，可保留多个历史版本；
+- **支持恢复任意一个备份**，防止误操作或数据丢失；
+- **在多个标签页同时打开网页时**，系统会检测版本冲突并弹出警告，避免被旧页面覆盖；
+- （尚未修复）从备份中导出的 CSV 文件部分仍有 bug，未来将继续完善。
+
+- **Automatic and manual backups** are now supported, allowing you to save multiple historical versions;
+- **You can restore from any backup** to recover from accidental changes;
+- **When the stopwatch is opened in multiple browser tabs**, the system checks for version mismatch and warns before saving, to prevent overwriting from outdated pages;
+- (Still under repair) CSV export from backups has a known bug and will be improved in future versions.
+
+### 🔧 网页合并脚本更新（HTML Merging Script Updated）
+
+- 修复了 `combine_html.m` 中 `<script>` 标签替换失败的问题；
+- 支持将多个 JS 模块正确嵌入 HTML，适用于打包离线版本；
+- 尚未在 Octave 中实际测试，但理论上兼容。
+
+- Fixed a bug in `combine_html.m` where `<script>` tag replacement previously failed;
+- Now supports correctly embedding all JS modules into the final HTML for offline use;
+- Not yet tested in Octave, but expected to be compatible.
+
 ---
 
 Made with ❤️ by Captain Sam & ChatGPT
