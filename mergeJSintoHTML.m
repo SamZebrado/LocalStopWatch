@@ -1,30 +1,35 @@
-% 设置路径
+% 拼接HTML和JS文件为单个网页
 htmlFile = 'stopwatch.html';
-jsFolder = '.'; % 所有 .js 文件所在目录
+jsFolder = '.'; % JS文件所在目录
 outputFile = 'stopwatch_combined.html';
 
-% 读取 HTML 内容
+% 读取HTML内容
 htmlText = fileread(htmlFile);
 
-% 匹配所有 script 引用
+% 查找所有的script引用
 jsPattern = '<script[^>]+src="([^"]+\.js)"[^>]*></script>';
 tokens = regexp(htmlText, jsPattern, 'tokens');
 
-% 将外部 script 替换为嵌入内容
+% 替换script引用为内联JS代码
 for i = 1:length(tokens)
-    jsFile = fullfile(jsFolder, tokens{i}{1});
-    if exist(jsFile, 'file')
-        jsCode = fileread(jsFile);
-        wrapped = sprintf('<script>\n%s\n</script>', jsCode);
-        htmlText = regexprep(htmlText, sprintf('<script[^>]+src="%s"[^>]*></script>', tokens{i}{1}), wrapped, 'once');
+    jsFilePath = fullfile(jsFolder, tokens{i}{1});
+    if exist(jsFilePath, 'file')
+        jsCode = fileread(jsFilePath);
+        replacement = sprintf('<script>\n%s\n</script>', jsCode);
+        htmlText = strrep(htmlText, ...
+            sprintf('<script defer src="%s"></script>', tokens{i}{1}), ...
+            replacement);
     else
-        warning('JS 文件不存在: %s', jsFile);
+        warning('未找到JS文件: %s', jsFilePath);
     end
 end
 
-% 写出新的 HTML 文件
-fid = fopen(outputFile, 'w', 'n', 'UTF-8');
-fwrite(fid, htmlText);
+% 安全地写出新的HTML文件
+[fid, errmsg] = fopen(outputFile, 'w', 'n', 'UTF-8');
+if fid == -1
+    error('文件无法打开: %s', errmsg);
+end
+fwrite(fid, htmlText, 'char');
 fclose(fid);
 
-fprintf('✅ 整合完成: %s\n', outputFile);
+fprintf('✅ 文件合并完成: %s\n', outputFile);

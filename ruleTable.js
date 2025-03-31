@@ -52,9 +52,13 @@ function addRuleRow() {
   renderRuleTable();
 }
 
+// 多语言提示字典
+
+
 function showRuleHelp() {
-  alert(`规则说明：\n\n1. 第一行是标签名（Tag），可点击编辑；\n2. 每列为一个标签，下面填写该标签的关键字；\n3. 精确匹配，大小写敏感；\n4. 若关键字前加 ~ 表示“备注中不包含该词”时匹配。`);
+  alert(getI18n('ruleHelp'));
 }
+
 
 function exportRules() {
   const csv = ruleTable.map(col => col.tag).join(',') + '\n' +
