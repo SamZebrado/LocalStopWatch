@@ -189,17 +189,6 @@ window.onload = () => {
   logs.push({ type: '刷新', time: formatDateWithTimezone(new Date()) });
   localStorage.setItem('logs', JSON.stringify(logs));
   updateLogDisplay();
-
-const parseAllBtn = document.createElement('button');
-parseAllBtn.setAttribute('data-zh', '解析全部');
-parseAllBtn.setAttribute('data-mix', '解析全部 / Parse All');
-parseAllBtn.setAttribute('data-en', 'Parse All');
-parseAllBtn.textContent = getI18n('parseAll');
-parseAllBtn.onclick = () => {
-  intervals.forEach((_, i) => parseMemo(i));
-};
-document.getElementById('interval-controls')?.appendChild(parseAllBtn);
-
 };
 
 
