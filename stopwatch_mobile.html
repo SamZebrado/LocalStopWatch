@@ -1,0 +1,952 @@
+<!-- stopwatch.html 主页面 -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <meta charset="UTF-8">
+  <title>本地网页秒表</title>
+  <script>
+// timer.js
+
+let t_Initial = Number(localStorage.getItem('t_Initial')) || Date.now();
+let t_Last = Number(localStorage.getItem('t_Last')) || t_Initial;
+let intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
+let logs = JSON.parse(localStorage.getItem('logs') || '[]');
+
+function pad(n, z = 2) { return ('00' + n).slice(-z); }
+
+function formatTime(ms) {
+  let totalSeconds = Math.floor(ms / 1000);
+  let hours = Math.floor(totalSeconds / 3600);
+  let minutes = Math.floor((totalSeconds % 3600) / 60);
+  let seconds = totalSeconds % 60;
+  let fraction = Math.floor((ms % 1000));
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${String(fraction).padStart(3, '0')}`;
+}
+
+function formatDateWithTimezone(date) {
+  const dateStr = date.toLocaleString(undefined, { timeZoneName: 'short' });
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${dateStr}.${ms}`;
+}
+
+function exportIntervalsToCSV() {
+  if (!intervals.length) {
+    alert(getI18n('noRecords'));
+    return;
+  }
+
+  const rows = [
+    ['持续时间（分钟）', '格式化时间', '备注', '标签', '结束时间']
+  ];
+
+  intervals.forEach(item => {
+    const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '';
+    const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
+    rows.push([
+      mins,
+      item.duration || '',
+      item.memo || '',
+      item.tag || '',
+      endTimeStr
+    ]);
+  });
+
+  const csv = rows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  const now = new Date();
+  const filename = `${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
+
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function updateDisplay() {
+  const now = Date.now();
+  const elapsed = now - t_Last;
+
+  document.getElementById('current-duration').textContent = formatTime(elapsed);
+  document.getElementById('absolute-time').textContent = new Date(now).toLocaleTimeString();
+  document.getElementById('absolute-date').textContent = new Date(now).toLocaleDateString();
+  document.getElementById('initial-time').textContent = new Date(t_Initial).toLocaleTimeString();
+  document.getElementById('initial-date').textContent = new Date(t_Initial).toLocaleDateString();
+
+  requestAnimationFrame(updateDisplay);
+}
+
+function renderIntervals() {
+  const container = document.getElementById('intervals-container');
+  container.innerHTML = '';
+
+  intervals.slice().reverse().forEach((item, index) => {
+    const trueIndex = intervals.length - 1 - index;
+    const div = document.createElement('div');
+    div.className = 'interval-record';
+    const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '--';
+    const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
+    div.innerHTML = `
+      <div><strong class="duration">${mins} 分钟</strong></div>
+      <div>Tag: <input value="${item.tag || ''}" oninput="updateTag(${trueIndex}, this.value)"></div>
+      <div>Memo: <input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)"></div>
+      <div>指定时间（分钟）: <input type="number" value="${item.setDuration || ''}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
+      <div>结束时间: ${endTimeStr}</div>
+      <button onclick="parseMemo(${trueIndex})">解析Memo</button>
+      <button onclick="undoParse(${trueIndex})">撤销</button>
+    `;
+    if (item.parsed) div.style.background = '#eee';
+    container.appendChild(div);
+  });
+}
+
+function rememberInterval() {
+  const now = Date.now();
+  const localCopy = JSON.parse(localStorage.getItem('intervals') || '[]');
+  if (localCopy.length > intervals.length) {
+    alert(getI18n('outdatedWarning'));
+    return;
+  }
+
+  const durationMs = now - t_Last;
+  const memo = document.getElementById('memo-input').value.trim();
+
+  const item = {
+    memo,
+    tag: '',
+    duration: formatTime(durationMs),
+    durationMs,
+    endTime: now,
+    setDuration: '',
+    originalMemo: memo,
+    parsed: false
+  };
+
+  intervals.push(item);
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+
+  document.getElementById('memo-input').value = '';
+
+  t_Last = now;
+  localStorage.setItem('t_Last', t_Last);
+  renderIntervals();
+}
+
+function updateTag(index, value) {
+  intervals[index].tag = value;
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+}
+
+function updateMemo(index, value) {
+  intervals[index].memo = value;
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+}
+
+function updateSetDuration(index, value) {
+  intervals[index].setDuration = value;
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+}
+
+function resetTimer() {
+  t_Initial = Date.now();
+  t_Last = t_Initial;
+  localStorage.setItem('t_Initial', t_Initial);
+  localStorage.setItem('t_Last', t_Initial);
+}
+
+function updateLogDisplay() {
+  const logText = logs.map(l => `【${l.type}】${l.time}`).join('\n---\n');
+  document.getElementById('log-content').textContent = logText;
+}
+
+function refreshLog() {
+  logs = logs.filter(l => l.type !== 'Interval');
+  intervals.forEach(item => {
+    logs.push({
+      type: 'Interval',
+      time: formatDateWithTimezone(new Date(item.endTime))
+    });
+  });
+  localStorage.setItem('logs', JSON.stringify(logs));
+  updateLogDisplay();
+}
+
+function clearLog() {
+  logs = [];
+  localStorage.setItem('logs', JSON.stringify(logs));
+  updateLogDisplay();
+}
+
+function copyLog() {
+  navigator.clipboard.writeText(document.getElementById('log-content').textContent);
+}
+
+
+function toggleInitialTime() {
+  const section = document.getElementById("initial-time-section");
+  const btn = document.getElementById("toggle-initial-time-btn");
+  const isHidden = section.style.display === "none";
+  section.style.display = isHidden ? "block" : "none";
+  btn.textContent = isHidden ? "隐藏第一个开始时间" : "显示第一个开始时间";
+}
+
+window.onload = () => {
+  updateDisplay();
+  renderIntervals();
+  logs.push({ type: '刷新', time: formatDateWithTimezone(new Date()) });
+  localStorage.setItem('logs', JSON.stringify(logs));
+  updateLogDisplay();
+};
+
+
+
+// ===  全局多语言提示表 ===
+const i18n = {
+  noRecords: {
+    zh: '没有记录可导出',
+    mix: '没有记录可导出',
+    en: 'No records to export'
+  },
+  outdatedWarning: {
+    zh: '⚠️ 当前页面不是最新版本，记录已被其他标签页修改，请刷新后再尝试。',
+    mix: '⚠️ 当前页面不是最新版本，记录已被其他标签页修改，请刷新后再尝试。',
+    en: '⚠️ This page is outdated. Records have been updated in another tab. Please refresh and try again.'
+  },
+  manualBackupSaved: {
+    zh: '✅ 手动备份已保存',
+    mix: '✅ 手动备份已保存',
+    en: '✅ Manual backup saved'
+  },
+  noBackup: {
+    zh: '暂无备份',
+    mix: '暂无备份',
+    en: 'No backups found'
+  },
+  csvImportError: {
+    zh: '❌ CSV格式错误，导入失败',
+    mix: '❌ CSV格式错误',
+    en: '❌ Invalid CSV format'
+  },
+    parseFailed: {
+    zh: '❌ 解析失败：找不到对应的记录。',
+    mix: '❌ 解析失败：找不到对应的记录。',
+    en: '❌ Parsing failed: item not found.'
+  },
+  undoFailed: {
+    zh: '⚠️ 无法撤销：该记录未被解析。',
+    mix: '⚠️ 无法撤销：该记录未被解析。',
+    en: '⚠️ Cannot undo: this item was not parsed.'
+  },
+    ruleHelp: {
+    zh: `
+规则说明：
+
+1. 第一行是标签名（Tag），可点击编辑；
+2. 每列为一个标签，下面填写该标签的关键字；
+3. 精确匹配，大小写敏感；
+4. 若关键字前加 ~ 表示“备注中不包含该词”时匹配；
+5. 标签的匹配顺序从左到右，找到一个匹配就会停止；
+6. 感叹号开头的关键词（如 !sp）会严格匹配并从 Memo 中删除，且仅在 Memo 末尾部分生效；
+7. 默认会清除匹配的关键词，但你可以通过感叹号前缀或否定关键词保留特定的匹配项；
+8. 备份规则可以通过 CSV 导入或导出进行操作。
+    `,
+    mix: `
+Rule Explanation:
+
+1. The first row is for the tag names (Tag), editable;
+2. Each column represents a tag, with keywords listed below each tag;
+3. Exact matching, case-sensitive;
+4. Keywords prefixed with ~ match when the word is not present in Memo;
+5. Tags are matched from left to right, and matching stops once a keyword is found;
+6. Keywords starting with ! (e.g., !sp) will strictly match and remove the keyword from the end of the Memo only;
+7. By default, matched keywords are removed, but you can preserve specific matches by using the exclamation mark or the negation keyword;
+8. Backup rules can be imported or exported via CSV.
+    `,
+    en: `
+Rule Explanation:
+
+1. The first row is for the tag names (Tag), editable;
+2. Each column represents a tag, with keywords listed below each tag;
+3. Exact matching, case-sensitive;
+4. Keywords prefixed with ~ match when the word is not present in Memo;
+5. Tags are matched from left to right, and matching stops once a keyword is found;
+6. Keywords starting with ! (e.g., !sp) will strictly match and remove the keyword from the Memo’s end, only for the last part;
+7. By default, matched keywords are removed, but you can preserve specific matches using the exclamation mark or negation keyword;
+8. Backup rules can be imported or exported via CSV.
+    `
+  }
+};
+
+function getI18n(key) {
+  const lang = window.currentLang || 'zh';
+  return (i18n[key] && i18n[key][lang]) || i18n[key]?.zh || '';
+}
+
+// === 1. 显示所有备份列表 ===
+function listAllBackups() {
+  const container = document.getElementById('backup-list');
+  container.innerHTML = '';
+  const allKeys = Object.keys(localStorage).filter(k => k.startsWith('intervals_manual_') || k.startsWith('intervals_auto_'));
+  if (allKeys.length === 0) {
+    container.innerHTML = `<p>${getI18n('noBackup')}</p>`;
+    return;
+  }
+  allKeys.sort();
+  allKeys.reverse();
+  allKeys.forEach((key, i) => {
+    const div = document.createElement('div');
+    div.innerHTML = `${i + 1}. ${key} <button onclick="exportBackupToCSV('${key}')">导出CSV</button>`;
+    container.appendChild(div);
+  });
+}
+
+// === 2. 手动备份功能 ===
+function triggerManualBackup() {
+  const keyPrefix = 'intervals_manual_';
+  const all = Object.keys(localStorage).filter(k => k.startsWith(keyPrefix));
+  all.sort();
+  if (all.length >= 3) {
+    const oldest = all[0];
+    localStorage.removeItem(oldest);
+  }
+  const now = new Date().toISOString().replace(/[:.]/g, '-');
+  const current = JSON.parse(localStorage.getItem('intervals') || '[]');
+  localStorage.setItem(`${keyPrefix}${now}`, JSON.stringify(current));
+  listAllBackups();
+  alert(getI18n('manualBackupSaved'));
+}
+
+// === 3. 导入CSV为interval数据 ===
+function importBackupFromCSV() {
+  const fileInput = document.getElementById('import-backup-file');
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const text = e.target.result;
+    const lines = text.trim().split('\n');
+    const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    const idx = name => header.indexOf(name);
+    const result = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cells = lines[i].split(',').map(s => s.replace(/^"|"$/g, ''));
+      result.push({
+        duration: parseFloat(cells[idx('Duration')]) * 60000,
+        memo: cells[idx('Memo')] || '',
+        tag: cells[idx('Tag')] || '',
+        setDuration: cells[idx('SetDuration')] || '',
+        endTime: cells[idx('EndTime')] || new Date().toISOString(),
+        parsed: true
+      });
+    }
+    localStorage.setItem('intervals', JSON.stringify(result));
+    location.reload();
+  };
+  reader.readAsText(file);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  listAllBackups(); // 页面加载后展示备份列表
+});
+
+function restoreLatestBackup() {
+  // 获取所有备份（手动备份或自动备份）
+  const backupKeys = Object.keys(localStorage).filter(key => key.startsWith('intervals_manual_') || key.startsWith('intervals_auto_'));
+
+  if (backupKeys.length === 0) {
+    alert('没有找到备份');
+    return;
+  }
+
+  // 创建对话框容器
+  const dialog = document.createElement('div');
+  dialog.style.position = 'fixed';
+  dialog.style.top = '50%';
+  dialog.style.left = '50%';
+  dialog.style.transform = 'translate(-50%, -50%)';
+  dialog.style.backgroundColor = 'white';
+  dialog.style.border = '1px solid #ccc';
+  dialog.style.padding = '20px';
+  dialog.style.zIndex = '9999';
+  dialog.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+  dialog.style.maxHeight = '80vh';
+  dialog.style.overflowY = 'auto';
+
+  // 添加标题
+  const title = document.createElement('h3');
+  title.textContent = '选择要恢复的备份';
+  dialog.appendChild(title);
+
+  // 添加备份列表
+  const backupList = document.createElement('ul');
+  backupKeys.forEach(key => {
+    const listItem = document.createElement('li');
+    const backupName = key.split('_').slice(-1).join('_'); // 提取备份名称
+    listItem.textContent = `${backupName}`;
+
+    // 为每个备份创建恢复按钮
+    const restoreButton = document.createElement('button');
+    restoreButton.textContent = '恢复该备份';
+    restoreButton.onclick = () => {
+      // 弹出确认框，确认是否恢复
+      const userConfirmed = confirm(`确定要恢复备份：${backupName} 吗？`);
+      if (userConfirmed) {
+        const backupData = localStorage.getItem(key);
+        if (backupData) {
+          const intervals = JSON.parse(backupData);
+          localStorage.setItem('intervals', JSON.stringify(intervals));
+          location.reload();  // 刷新页面，恢复数据
+        } else {
+          alert('备份数据无效');
+        }
+      }
+    };
+
+    // 将按钮附加到列表项
+    listItem.appendChild(restoreButton);
+    backupList.appendChild(listItem);
+  });
+
+  dialog.appendChild(backupList);
+
+  // 添加关闭按钮
+  const closeButton = document.createElement('button');
+  closeButton.textContent = '取消';
+  closeButton.onclick = () => {
+    document.body.removeChild(dialog);  // 关闭对话框
+  };
+  dialog.appendChild(closeButton);
+
+  // 显示对话框
+  document.body.appendChild(dialog);
+}
+
+</script>
+  <script>
+// ruleTable.js
+
+let ruleTable = JSON.parse(localStorage.getItem('ruleTable') || '[]');
+let previousRuleTable = [];
+let rowCount = Number(localStorage.getItem('ruleRowCount')) || 50;
+
+function renderRuleTable() {
+  const table = document.getElementById('rule-table');
+  table.innerHTML = '';
+
+  const headerRow = document.createElement('tr');
+  ruleTable.forEach((col, colIdx) => {
+    const th = document.createElement('th');
+    const input = document.createElement('input');
+    input.value = col.tag;
+    input.oninput = (e) => {
+      ruleTable[colIdx].tag = e.target.value;
+      localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+    };
+    th.appendChild(input);
+    headerRow.appendChild(th);
+  });
+  table.appendChild(headerRow);
+
+  for (let row = 0; row < rowCount; row++) {
+    const tr = document.createElement('tr');
+    ruleTable.forEach((col, colIdx) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.value = col.keywords[row] || '';
+      input.oninput = (e) => {
+        ruleTable[colIdx].keywords[row] = e.target.value;
+        localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+      };
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  }
+}
+
+function addRuleColumn() {
+  const newTag = `标签${ruleTable.length + 1}`;
+  ruleTable.push({ tag: newTag, keywords: [] });
+  localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+  renderRuleTable();
+}
+
+function addRuleRow() {
+  rowCount += 1;
+  localStorage.setItem('ruleRowCount', rowCount);
+  renderRuleTable();
+}
+
+// 多语言提示字典
+
+
+function showRuleHelp() {
+  alert(getI18n('ruleHelp'));
+}
+
+
+function exportRules() {
+  const csv = ruleTable.map(col => col.tag).join(',') + '\n' +
+    Array.from({ length: rowCount }, (_, i) =>
+      ruleTable.map(col => col.keywords[i] || '').join(',')
+    ).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ruleTable.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importRules(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const lines = reader.result.split(/\r?\n/);
+    const tags = lines[0].split(',');
+    const keywords = lines.slice(1).map(line => line.split(','));
+    ruleTable = tags.map((tag, idx) => ({
+      tag,
+      keywords: keywords.map(row => row[idx] || '')
+    }));
+    rowCount = keywords.length;
+    localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+    localStorage.setItem('ruleRowCount', rowCount);
+    renderRuleTable();
+  };
+  reader.readAsText(file);
+}
+
+function undoClearRules() {
+  if (previousRuleTable.length > 0) {
+    ruleTable = previousRuleTable;
+    localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+    renderRuleTable();
+  }
+}
+
+function clearRuleTable() {
+  previousRuleTable = JSON.parse(JSON.stringify(ruleTable));
+  ruleTable = [];
+  localStorage.setItem('ruleTable', '[]');
+  renderRuleTable();
+}
+
+if (!ruleTable.length) {
+  ruleTable = [
+    { tag: '标签1', keywords: [] },
+    { tag: '标签2', keywords: [] },
+    { tag: '标签3', keywords: [] },
+    { tag: '标签4', keywords: [] }
+  ];
+  localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
+}
+
+window.addEventListener('load', renderRuleTable);
+window.addEventListener('load', () => {
+  const buttonArea = document.createElement('div');
+  buttonArea.innerHTML = `
+    <button onclick="addRuleColumn()">➕ 增加标签列</button>
+    <button onclick="addRuleRow()">➕ 增加关键字行</button>
+  `;
+  document.getElementById('tab-rules').insertBefore(buttonArea, document.getElementById('rule-table'));
+});
+</script>
+  <script>
+// memoParser.js
+
+function getI18n(key) {
+  const lang = window.currentLang || 'zh';
+  return (i18n[key] && i18n[key][lang]) || i18n[key]?.zh || '';
+}
+
+function parseMemo(index) {
+  const intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
+  const rules = JSON.parse(localStorage.getItem('ruleTable') || '[]');
+  let item = intervals[index];
+
+  if (!item) {
+    alert(getI18n('parseFailed'));
+    return;
+  }
+
+  const originalMemo = item.memo;
+  item.memo = item.memo.trim();
+
+  // 提取末尾数字作为 setDuration
+  const durationMatch = item.memo.match(/(\d+)\s*$/);
+  if (durationMatch) {
+    item.setDuration = Number(durationMatch[1]);
+    item.memo = item.memo.replace(durationMatch[0], '').trim();
+  } else if (item.duration < 60000 && !item.setDuration) {
+    item.setDuration = 1;
+  }
+
+  const tags = new Set();
+  let keywordRegion = item.memo;
+
+  for (const col of rules) {
+    let includeTag = false;
+    let hasNegationHit = false;
+
+    for (const keyword of col.keywords) {
+      if (!keyword) break; // 空白行中断该列处理
+
+      const isNegation = keyword.startsWith('~');
+      const isForceDelete = keyword.includes('!');
+      const cleaned = keyword.replace(/[~!]/g, '');
+
+      // 感叹号关键词处理：在末尾后缀中删除匹配项
+      if (isForceDelete) {
+        const suffixMatch = keywordRegion.match(/([a-zA-Z0-9]+)$/);
+        if (suffixMatch) {
+          const suffix = suffixMatch[1];
+          if (suffix.includes(cleaned)) {
+            const newSuffix = suffix.replace(new RegExp(cleaned, 'g'), '');
+            keywordRegion = keywordRegion.slice(0, -suffix.length) + newSuffix;
+            includeTag = true;  // 标记需要添加标签
+          }
+        }
+      }
+
+      // 否定关键词：只判断，不删除
+      if (isNegation && keywordRegion.includes(cleaned)) {
+        hasNegationHit = true;
+      }
+
+      // 普通关键词：匹配则标记需要添加标签
+      if (!isNegation && !isForceDelete && keywordRegion.includes(cleaned)) {
+        includeTag = true;
+      }
+    }
+
+    if (includeTag && !hasNegationHit) {
+      tags.add(col.tag);
+    }
+  }
+
+  item.memo = keywordRegion.trim().replace(/\s+/g, ' ');
+  item.tag = Array.from(tags).map(t => '#' + t).join(' ');
+  item.parsed = true;
+  item.originalMemo = originalMemo;
+
+  intervals[index] = item;
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+  location.reload();
+}
+
+function undoParse(index) {
+  const intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
+  const item = intervals[index];
+  if (!item || !item.parsed) {
+    alert(getI18n('undoFailed'));
+    return;
+  }
+
+  item.memo = item.originalMemo;
+  item.tag = '';
+  item.setDuration = '';
+  item.parsed = false;
+
+  intervals[index] = item;
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+  location.reload();
+}
+
+</script>
+  <script>
+// exportTomato.js
+
+function exportTomatoPotato() {
+  const raw = JSON.parse(localStorage.getItem('intervals') || '[]');
+  if (!raw.length) {
+    alert('没有记录可导出');
+    return;
+  }
+
+  // 深拷贝防止修改原始数据
+  const intervals = JSON.parse(JSON.stringify(raw));
+
+  // 预处理：四舍五入每条 interval 的实际时长（单位：分钟）
+  intervals.forEach(item => {
+    item.actualMin = Math.round(item.duration / 60000);
+    if (!item.setDuration && item.actualMin < 1) {
+      item.setDuration = 1;
+    }
+  });
+
+  // 分配时间：按 setDuration 优先级调整
+  for (let i = 0; i < intervals.length; i++) {
+    const cur = intervals[i];
+    if (cur.setDuration) {
+      const t = cur.setDuration;
+      const d = cur.actualMin;
+      if (t < d) {
+        // 向后补给多余的时间
+        let extra = d - t;
+        for (let j = i + 1; j < intervals.length && extra > 0; j++) {
+          if (!intervals[j].setDuration) {
+            intervals[j].actualMin += extra;
+            break;
+          }
+        }
+        cur.actualMin = t;
+      } else if (t > d) {
+        // 向前借用时间
+        let need = t - d;
+        for (let j = i - 1; j >= 0 && need > 0; j--) {
+          if (!intervals[j].setDuration && intervals[j].actualMin > need) {
+            intervals[j].actualMin -= need;
+            break;
+          }
+        }
+        cur.actualMin = t;
+      }
+    }
+  }
+
+  const output = intervals.map(item => {
+    const tag = item.tag || '';
+    const memo = item.memo || '';
+    const min = item.actualMin;
+    return `${tag} ${memo} ${min}min`.trim();
+  }).join(' + ');
+
+  document.getElementById('tomato-output').textContent = output;
+  navigator.clipboard.writeText(output);
+  alert('已复制到剪贴板');
+}
+
+</script>
+
+<style>
+  .main-container {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 1000px;
+  }
+</style>
+
+
+<style>
+  .main-container {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 1000px;
+  }
+  .main-input {
+    width: 100%;
+    font-size: 16px;
+    padding: 10px;
+    box-sizing: border-box;
+    margin-top: 0.5em;
+  }
+  .main-button {
+    width: 100%;
+    font-size: 16px;
+    padding: 10px;
+    margin-top: 8px;
+    box-sizing: border-box;
+  }
+</style>
+
+
+<style>
+  body.dark-mode {
+    background-color: #121212;
+    color: #e0e0e0;
+  }
+  body.dark-mode input, 
+  body.dark-mode button, 
+  body.dark-mode textarea {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border-color: #444;
+  }
+  body.dark-mode .tab-button {
+    background-color: #1e1e1e;
+    color: #ffffff;
+    border: 1px solid #444;
+  }
+</style>
+
+<script>
+  function toggleDarkMode() {
+    document.body.classList.toggle("dark-mode");
+    localStorage.setItem("dark-mode", document.body.classList.contains("dark-mode"));
+  }
+  window.addEventListener("DOMContentLoaded", () => {
+    if (localStorage.getItem("dark-mode") === "true") {
+      document.body.classList.add("dark-mode");
+    }
+  });
+</script>
+
+
+<style>
+  html {
+    font-size: 18px;
+  }
+  button {
+    font-size: 1rem !important;
+  }
+  input {
+    font-size: 1rem !important;
+  }
+  #lang-toggle,
+  #dark-toggle {
+    font-size: 0.9rem;
+    padding: 4px 8px;
+  }
+  .interval-record input {
+    font-size: 1rem;
+  }
+  .interval-record {
+    margin-bottom: 2em;
+  }
+</style>
+
+</head>
+<body>
+  <h1 class="main-container" style="padding-left: 0px; padding-right: 0px;" data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
+  
+  <div class="tabs main-container" style="padding-left: 0px; padding-right: 0px;">  
+    <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
+    <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义备注解析规则" data-mix="定义Memo解析规则" data-en="Memo Parsing Rules">定义备注解析规则</button>
+    <button class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export">番茄土豆格式导出</button>
+    <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志和备份" data-mix="运行日志和备份" data-en="Log & Backups">运行日志和备份</button>
+
+    <button class="tab-button" onclick="toggleDarkMode()" id="dark-toggle">🌓 深色模式</button>
+  <button class="tab-button" id="lang-toggle" onclick="toggleLang()">English</button>
+</div>
+
+  <div id="tab-timer" class="tab-content">
+    <section id="display-section" class="main-container">
+      <h2 data-zh="当前记录段持续时间" data-mix="当前Interval持续时间" data-en="Current Interval Duration">当前记录段持续时间</h2>
+      <div id="current-duration" class="big-time">00:00:00.00</div>
+      <div class="sub-time" id="current-date"></div>
+
+      <h2 data-zh="当前绝对时间" data-mix="当前绝对时间" data-en="Current Absolute Time">当前绝对时间</h2>
+      <div id="absolute-time" class="big-time">--:--:--</div>
+      <div class="sub-time" id="absolute-date"></div>
+
+      <section class="main-container" style="margin-top: 12px;">
+<button onclick="toggleInitialTime()" id="toggle-initial-time-btn">显示第一个开始时间</button>
+</section>
+<section class="main-container">
+<div id="initial-time-section" style="display:none;">
+  <h2 data-zh="第一个记录段开始的时间" data-mix="第一个Interval开始的时间" data-en="First Interval Start Time">第一个记录段开始的时间</h2>
+  <div id="initial-time" class="big-time">--:--:--</div>
+  <div class="sub-time" id="initial-date"></div>
+</div>
+    </section>
+
+    <section id="upper-controls" class="main-container" style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 30px; padding: 0 20px; max-width: 1000px;">
+  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+    <button onclick="confirmExportAndClear()" data-zh="导出并清空记录" data-mix="导出并清空记录" data-en="Export & Clear">导出并清空记录</button>
+    <button onclick="exportIntervalsToCSV()" data-zh="导出CSV" data-mix="导出CSV" data-en="Export CSV">导出CSV</button>
+    <button onclick="triggerManualBackup()" data-zh="手动备份" data-mix="手动备份" data-en="Manual Backup">手动备份</button>
+    <button onclick="restoreLatestBackup()" data-zh="恢复历史备份" data-mix="恢复历史备份" data-en="Restore Backup">恢复历史备份</button>
+  </div>
+  <input id="memo-input" placeholder="当前记录段的备注..." maxlength="1000" class="main-input">
+<button onclick="rememberInterval()" class="main-button" data-zh="记下" data-mix="记下" data-en="Remember">记下</button>
+</div>
+<section id="intervals-section" class="main-container">
+      <h2 data-zh="历史记录" data-mix="历史记录" data-en="History">历史记录</h2>
+      <div id="intervals-container"></div>
+    </section>
+  </div>
+
+  <div id="tab-rules" class="tab-content" style="display:none">
+    <h2 data-zh="备注解析规则" data-mix="Memo解析规则" data-en="Memo Parsing Rules">备注解析规则</h2>
+    <button onclick="showRuleHelp()" data-zh=" 使用方法" data-mix=" 使用方法" data-en=" Help"> 使用方法</button>
+    <button onclick="exportRules()" data-zh=" 导出规则" data-mix=" 导出规则" data-en=" Export Rules"> 导出规则</button>
+    <input type="file" id="import-rule-file" accept=".csv" onchange="importRules(event)">
+    <button onclick="undoClearRules()" data-zh="↩️ 撤销清空规则" data-mix="↩️ 撤销清空规则" data-en="↩️ Undo Clear">↩️ 撤销清空规则</button>
+    <table id="rule-table"></table>
+  </div>
+
+  <div id="tab-export" class="tab-content" style="display:none">
+    <h2 data-zh=" 导出番茄土豆格式" data-mix=" 导出番茄土豆格式" data-en=" Tomato Export"> 导出番茄土豆格式</h2>
+    <button onclick="exportTomatoPotato()" data-zh=" 生成并复制" data-mix=" 生成并复制" data-en=" Generate & Copy"> 生成并复制</button>
+    <div id="tomato-output"></div>
+  </div>
+
+  <div id="tab-log" class="tab-content" style="display:none">
+    <h2 data-zh="️ 运行日志" data-mix="️ 运行日志" data-en="️ Log">️ 运行日志</h2>
+    <button onclick="refreshLog()" data-zh=" 刷新日志" data-mix=" 刷新日志" data-en=" Refresh Log"> 刷新日志</button>
+    <button onclick="copyLog()" data-zh=" 复制日志" data-mix=" 复制日志" data-en=" Copy Log"> 复制日志</button>
+    <button onclick="clearLog()" data-zh="️ 清空日志" data-mix="️ 清空日志" data-en="️ Clear Log">️ 清空日志</button>
+    <pre id="log-content"></pre>
+    <h3 data-zh=" 可用备份列表" data-mix=" 可用备份列表" data-en=" Available Backups"> 可用备份列表</h3>
+    <div id="backup-list"></div>
+    
+  </div>
+
+  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:#fff; border:1px solid #ccc; position:fixed; top:30%; left:30%; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.2);">
+    <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
+    <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
+    <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-mix="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
+  <footer>
+    <hr>
+    <small>参考了原网页 https://stopwatch.online-timers.com/stopwatch-with-time-intervals 的功能，由 ChatGPT 重新编写代码并添加了个性化修改。<br>项目地址：<a href="https://github.com/SamZebrado/LocalStopWatch" target="_blank">https://github.com/SamZebrado/LocalStopWatch</a></small>
+  </footer>
+
+  <script>
+    function showTab(id) {
+      document.querySelectorAll('.tab-content').forEach(div => div.style.display = 'none');
+      document.getElementById(id).style.display = 'block';
+    }
+    function confirmExportAndClear() {
+      document.getElementById('confirm-clear-dialog').style.display = 'block';
+    }
+    function exportThenClear() {
+      exportIntervalsToCSV();
+      intervals = [];
+      localStorage.setItem('intervals', JSON.stringify(intervals));
+      document.getElementById('intervals-container').innerHTML = '';
+      document.getElementById('confirm-clear-dialog').style.display = 'none';
+    }
+  // 初始化语言状态（优先从 localStorage 读取）
+  let currentLang = localStorage.getItem('lang') || 'mix';
+  const langCycle = ['zh', 'mix', 'en'];
+
+  function updateLangUI() {
+    document.querySelectorAll('[data-zh]').forEach(el => {
+      const val = el.getAttribute('data-' + currentLang);
+      if (val) el.textContent = val;
+    });
+
+    // 按钮显示下一个语言名称
+    const idx = langCycle.indexOf(currentLang);
+    const nextLang = langCycle[(idx + 1) % langCycle.length];
+    
+    
+    const labelMap = {
+      zh: ' 中文',//这样能与“下一个”语言一致
+      mix: ' 中文+English',
+      en: ' English'
+    };
+    document.getElementById('lang-toggle').textContent = labelMap[nextLang];
+  }
+
+  function toggleLang() {
+    const idx = langCycle.indexOf(currentLang);
+    currentLang = langCycle[(idx + 1) % langCycle.length];
+    localStorage.setItem('lang', currentLang);
+    updateLangUI();
+  }
+
+  // 页面加载后应用语言
+  document.addEventListener('DOMContentLoaded', updateLangUI);
+
+  </script>
+</body>
+</html>
