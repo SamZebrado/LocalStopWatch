@@ -47,19 +47,17 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
 
 ## 📁 文件说明（Files）
 
-- `stopwatch.html`：主网页文件，双击即可使用  
-  The main offline stopwatch web page  
-- `combine_html.m`：MATLAB 脚本，用于将多个 JS 合并为单个 HTML  
-  MATLAB script to combine all JS into a single HTML file  
-  ✅ 该脚本也可在 Octave 中运行（已测试通过）  
-  ✅ This script also works in [GNU Octave](https://www.gnu.org/software/octave/)
+- `stopwatch_combined.html`：主文件（唯一维护入口），双击即可使用  
+  Main file (single-source maintenance target), open directly to use  
+- `stopwatch.html`：跳转入口，会自动跳到 `stopwatch_combined.html`  
+  Redirect entry that forwards to `stopwatch_combined.html`
 
 ---
 
 ## 🚀 使用方法（How to Use）
 
-1. 用 Chrome 打开 `stopwatch.html`（建议使用最新版）  
-   Open `stopwatch.html` with Chrome  
+1. 用 Chrome 打开 `stopwatch_combined.html`（建议使用最新版）  
+   Open `stopwatch_combined.html` with Chrome  
 2. 使用 Memo 区、标签输入、解析规则来记录 interval  
    Use memo box, tags, and rules to annotate intervals  
 3. 使用导出按钮导出 CSV、番茄格式或日志  
@@ -136,6 +134,42 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 - Fixed a bug in `combine_html.m` where `<script>` tag replacement previously failed;
 - Now supports correctly embedding all JS modules into the final HTML for offline use;
 - Not yet tested in Octave, but expected to be compatible.
+
+### ☁️ 坚果云定时备份（Nutstore Scheduled Backup）- 2026-03-02
+
+- 新增坚果云 WebDAV 配置区：账号、应用密码、远程路径、自动备份间隔（小时）；
+- 新增“立即上传备份”按钮；
+- 新增自动上传开关，可按小时周期定时上传；
+- 远程路径支持子目录（如 `NewMars/LocalStopWatch_backup_latest.json`）；
+- 路径会自动 URL 编码，兼容中文目录；
+- 更新了 `stopwatch_combined.html`，手机单文件版本同步具备以上功能。
+
+- Added Nutstore WebDAV settings: account, app password, remote path, and hourly schedule;
+- Added “Upload Backup Now”;
+- Added auto-upload toggle with hour-based interval;
+- Remote path supports subfolders (e.g. `NewMars/LocalStopWatch_backup_latest.json`);
+- Path is URL-encoded automatically for better compatibility with non-ASCII folder names;
+- `stopwatch_combined.html` is regenerated and includes all new features.
+
+### 🔐 隐私与凭据说明（Privacy & Credentials）
+
+- 坚果云配置保存在浏览器 `localStorage`（设备本地），不会自动写入仓库文件；
+- 项目新增 `.gitignore`，用于忽略可能的本地备份/配置 JSON 文件，避免误提交；
+- 建议使用“应用密码”而不是主密码。
+
+- Nutstore settings are stored in browser `localStorage` (local device only), not in repo files by default;
+- Added `.gitignore` rules to avoid accidentally committing local backup/config JSON artifacts;
+- Use an app password rather than your account master password.
+
+### 🧩 维护策略更新（Maintenance Policy Update）- 2026-03-02
+
+- 项目已切换为“单文件维护模式”：后续只改 `stopwatch_combined.html`；
+- 历史分文件脚本（`timer.js`、`ruleTable.js`、`memoParser.js`、`exportTomato.js`）已从 git 跟踪中删除；
+- `stopwatch.html` 保留为跳转入口，避免旧链接失效。
+
+- Project now uses single-file maintenance: update `stopwatch_combined.html` only;
+- Legacy split JS files (`timer.js`, `ruleTable.js`, `memoParser.js`, `exportTomato.js`) are removed from git tracking;
+- `stopwatch.html` is kept as a redirect entry to preserve old links.
 
 ---
 
