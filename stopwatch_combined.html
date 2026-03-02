@@ -34,8 +34,6 @@ let uiTitleSize = Number(localStorage.getItem(UI_TITLE_SIZE_KEY)) || 32;
 let uiInputFontSize = Number(localStorage.getItem(UI_INPUT_FONT_SIZE_KEY)) || 18;
 let uiMainBtnHeight = Number(localStorage.getItem(UI_MAIN_BTN_HEIGHT_KEY)) || 58;
 let uiOtherBtnHeight = Number(localStorage.getItem(UI_OTHER_BTN_HEIGHT_KEY)) || 50;
-let advancedPressTimer = null;
-let advancedLongPressTriggered = false;
 
 const THEMES = [
   {
@@ -197,22 +195,29 @@ function renderIntervals() {
 
 function getAdvancedToggleLabel() {
   const lang = window.currentLang || 'zh';
-  const currentThemeId = localStorage.getItem(THEME_KEY) || THEMES[0].id;
-  const theme = THEMES.find(t => t.id === currentThemeId) || THEMES[0];
-  const themeName = (theme.labels && (theme.labels[lang] || theme.labels.zh)) || theme.id;
   const labels = {
     off: {
-      zh: `🧩 高级模式：关 | 主题：${themeName}（长按选主题）`,
-      mix: `🧩 高级模式：关 | Theme: ${themeName}（长按选主题）`,
-      en: `🧩 Advanced: Off | Theme: ${themeName} (Long Press)`
+      zh: '🧩 高级模式',
+      mix: '🧩 高级模式',
+      en: '🧩 Advanced'
     },
     on: {
-      zh: `🧩 高级模式：开 | 主题：${themeName}（长按选主题）`,
-      mix: `🧩 高级模式：开 | Theme: ${themeName}（长按选主题）`,
-      en: `🧩 Advanced: On | Theme: ${themeName} (Long Press)`
+      zh: '🧩 精简模式',
+      mix: '🧩 精简模式',
+      en: '🧩 Simple'
     }
   };
   return (isAdvancedMode ? labels.on : labels.off)[lang] || (isAdvancedMode ? labels.on.zh : labels.off.zh);
+}
+
+function getThemeButtonLabel() {
+  const lang = window.currentLang || 'zh';
+  const labels = {
+    zh: '🎨 颜色主题',
+    mix: '🎨 颜色主题',
+    en: '🎨 Theme'
+  };
+  return labels[lang] || labels.zh;
 }
 
 function applyThemeById(themeId) {
@@ -276,44 +281,6 @@ function selectThemeFromPicker(themeId) {
   applyThemeById(themeId);
   updateAdvancedModeUI();
   closeThemePickerDialog();
-}
-
-function onAdvancedButtonPressStart(e) {
-  advancedLongPressTriggered = false;
-  if (advancedPressTimer) clearTimeout(advancedPressTimer);
-  advancedPressTimer = setTimeout(() => {
-    advancedLongPressTriggered = true;
-    openThemePickerDialog();
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
-  }, 520);
-}
-
-function onAdvancedButtonPressEnd() {
-  if (advancedPressTimer) {
-    clearTimeout(advancedPressTimer);
-    advancedPressTimer = null;
-  }
-}
-
-function onAdvancedButtonClick(e) {
-  if (advancedLongPressTriggered) {
-    advancedLongPressTriggered = false;
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
-    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-    return;
-  }
-  toggleAdvancedMode();
-}
-
-function bindAdvancedButtonEvents() {
-  const btn = document.getElementById('advanced-toggle');
-  if (!btn || btn.dataset.bound === '1') return;
-  btn.dataset.bound = '1';
-  btn.addEventListener('pointerdown', onAdvancedButtonPressStart);
-  btn.addEventListener('pointerup', onAdvancedButtonPressEnd);
-  btn.addEventListener('pointerleave', onAdvancedButtonPressEnd);
-  btn.addEventListener('pointercancel', onAdvancedButtonPressEnd);
-  btn.addEventListener('click', onAdvancedButtonClick);
 }
 
 function getUiRange(kind) {
@@ -455,6 +422,10 @@ function updateAdvancedModeUI() {
   if (btn) {
     btn.textContent = getAdvancedToggleLabel();
     btn.classList.toggle('is-on', isAdvancedMode);
+  }
+  const themeBtn = document.getElementById('theme-toggle');
+  if (themeBtn) {
+    themeBtn.textContent = getThemeButtonLabel();
   }
 
   const exportTabBtn = document.getElementById('tab-export-btn');
@@ -1136,7 +1107,6 @@ document.addEventListener('DOMContentLoaded', () => {
   applyUIMainBtnHeight(uiMainBtnHeight);
   applyUIOtherBtnHeight(uiOtherBtnHeight);
   syncUiSizeInputs();
-  bindAdvancedButtonEvents();
   window.addEventListener('resize', autoFitButtonText);
   showTab('tab-timer');
   updateAdvancedModeUI();
@@ -1632,11 +1602,11 @@ function exportTomatoPotato() {
       margin-bottom: 0.45rem;
     }
     .top-actions {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 0.5rem;
-      justify-content: flex-start;
     }
+    .top-actions button { width: 100%; }
     .top-actions button,
     .tab-button { font-weight: 600; }
     #advanced-toggle.is-on {
@@ -1684,7 +1654,7 @@ function exportTomatoPotato() {
       min-width: 0;
     }
     .tab-button { width: 100%; }
-    #tab-btn-timer, #tab-export-btn { grid-column: 1 / -1; }
+    #tab-btn-timer { grid-column: 1 / -1; }
     #tab-btn-timer {
       min-height: var(--ui-main-btn-height);
       height: var(--ui-main-btn-height);
@@ -1693,11 +1663,7 @@ function exportTomatoPotato() {
     }
     @media (max-width: 780px) {
       body { margin: 0.7rem; }
-      .top-actions { justify-content: stretch; }
-      .top-actions button {
-        flex: 1 1 calc(50% - 0.5rem);
-        min-width: 0;
-      }
+      .top-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       button {
         white-space: normal;
         word-break: break-word;
@@ -1718,11 +1684,20 @@ function exportTomatoPotato() {
   <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="top-actions">
     <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
-    <button id="advanced-toggle">🧩 高级模式：关</button>
+    <button id="advanced-toggle" onclick="toggleAdvancedMode()">🧩 高级模式：关</button>
+    <button id="theme-toggle" onclick="openThemePickerDialog()" data-zh="🎨 颜色主题" data-mix="🎨 颜色主题" data-en="🎨 Theme">🎨 颜色主题</button>
   </div>
   <div id="font-size-control" style="display:none; margin-top:0.55rem; border:1px solid var(--border); border-radius:10px; padding:0.6rem;">
     <div class="size-row">
-      <label data-zh="文字字号(非标题)" data-mix="文字字号(非标题)" data-en="Text Size" for="font-size-input">文字字号(非标题)</label>
+      <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
+      <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')">
+    </div>
+    <div class="size-row">
+      <label data-zh="按钮字号" data-mix="按钮字号" data-en="Button Size" for="button-size-input">按钮字号</label>
+      <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')">
+    </div>
+    <div class="size-row">
+      <label data-zh="其他文字字号" data-mix="其他文字字号" data-en="Text Size" for="font-size-input">其他文字字号</label>
       <input id="font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('font', this.value)" onblur="onUiSizeBlur('font','font-size-input')">
     </div>
     <div class="size-row">
@@ -1730,20 +1705,18 @@ function exportTomatoPotato() {
       <input id="input-font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('inputFont', this.value)" onblur="onUiSizeBlur('inputFont','input-font-size-input')">
     </div>
     <div class="size-row">
-      <label data-zh="按钮字号" data-mix="按钮字号" data-en="Button Size" for="button-size-input">按钮字号</label>
-      <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')">
-    </div>
-    <div class="size-row">
-      <label data-zh="主按钮高度(计时器+记下)" data-mix="主按钮高度(计时器+记下)" data-en="Main Btn Height" for="main-btn-height-input">主按钮高度(计时器+记下)</label>
+      <label data-zh="主按钮高度" data-mix="主按钮高度" data-en="Main Btn Height" for="main-btn-height-input">主按钮高度</label>
       <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onchange="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')">
+    </div>
+    <div data-zh="主按钮包括“计时器”和“记下”两个按钮。"
+         data-mix="主按钮包括“计时器”和“记下”两个按钮。"
+         data-en="Main buttons include \"Timer\" and \"Remember\"."
+         style="margin-top:-0.2rem; margin-bottom:0.3rem; color:var(--muted);">
+      主按钮包括“计时器”和“记下”两个按钮。
     </div>
     <div class="size-row">
       <label data-zh="其他按钮高度" data-mix="其他按钮高度" data-en="Other Btn Height" for="other-btn-height-input">其他按钮高度</label>
       <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onchange="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')">
-    </div>
-    <div class="size-row">
-      <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
-      <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')">
     </div>
     <div data-zh="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
          data-mix="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
@@ -1933,7 +1906,7 @@ function exportTomatoPotato() {
     
     const labelMap = {
       zh: '🌐 中文',//这样能与“下一个”语言一致
-      mix: '🌐 中文+English',
+      mix: '🌐 中+En',
       en: '🌐 English'
     };
     document.getElementById('lang-toggle').textContent = labelMap[nextLang];
