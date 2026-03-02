@@ -1642,6 +1642,19 @@ function exportTomatoPotato() {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(122, 122, 122, 0.35);
     }
+    .size-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.45rem;
+      flex-wrap: wrap;
+    }
+    .size-row label {
+      min-width: 14rem;
+    }
+    .size-row input {
+      width: 5.8rem;
+    }
     #control-section {
       display: flex;
       flex-direction: column;
@@ -1682,6 +1695,15 @@ function exportTomatoPotato() {
         white-space: normal;
         word-break: break-word;
       }
+      .size-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .size-row label,
+      .size-row input {
+        width: 100%;
+        min-width: 0;
+      }
     }
   </style>
 </head>
@@ -1692,19 +1714,29 @@ function exportTomatoPotato() {
     <button id="advanced-toggle">🧩 高级模式：关</button>
   </div>
   <div id="font-size-control" style="display:none; margin-top:0.55rem; border:1px solid var(--border); border-radius:10px; padding:0.6rem;">
-    <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+    <div class="size-row">
       <label data-zh="文字字号(非标题)" data-mix="文字字号(非标题)" data-en="Text Size" for="font-size-input">文字字号(非标题)</label>
-      <input id="font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('font', this.value)" onblur="onUiSizeBlur('font','font-size-input')" style="width:5.2rem;">
+      <input id="font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('font', this.value)" onblur="onUiSizeBlur('font','font-size-input')">
+    </div>
+    <div class="size-row">
       <label data-zh="输入框字体" data-mix="输入框字体" data-en="Input Font" for="input-font-size-input">输入框字体</label>
-      <input id="input-font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('inputFont', this.value)" onblur="onUiSizeBlur('inputFont','input-font-size-input')" style="width:5.2rem;">
+      <input id="input-font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('inputFont', this.value)" onblur="onUiSizeBlur('inputFont','input-font-size-input')">
+    </div>
+    <div class="size-row">
       <label data-zh="按钮字号" data-mix="按钮字号" data-en="Button Size" for="button-size-input">按钮字号</label>
-      <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')" style="width:5.2rem;">
+      <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')">
+    </div>
+    <div class="size-row">
       <label data-zh="主按钮高度(计时器+记下)" data-mix="主按钮高度(计时器+记下)" data-en="Main Btn Height" for="main-btn-height-input">主按钮高度(计时器+记下)</label>
-      <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')" style="width:5.6rem;">
+      <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')">
+    </div>
+    <div class="size-row">
       <label data-zh="其他按钮高度" data-mix="其他按钮高度" data-en="Other Btn Height" for="other-btn-height-input">其他按钮高度</label>
-      <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')" style="width:5.6rem;">
+      <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')">
+    </div>
+    <div class="size-row">
       <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
-      <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')" style="width:5.2rem;">
+      <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')">
     </div>
     <div data-zh="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
          data-mix="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
