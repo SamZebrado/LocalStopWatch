@@ -14,7 +14,11 @@ let logs = JSON.parse(localStorage.getItem('logs') || '[]');
 const NUTSTORE_CFG_KEY = 'nutstore_backup_config_v1';
 const NUTSTORE_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
+const BACKUP_REMINDER_CFG_KEY = 'backup_download_reminder_cfg_v1';
+const ADVANCED_MODE_KEY = 'advanced_mode_enabled_v1';
 let nutstoreAutoTimer = null;
+let backupReminderTimer = null;
+let isAdvancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === '1';
 
 function pad(n, z = 2) { return ('00' + n).slice(-z); }
 
@@ -33,12 +37,7 @@ function formatDateWithTimezone(date) {
   return `${dateStr}.${ms}`;
 }
 
-function exportIntervalsToCSV() {
-  if (!intervals.length) {
-    alert(getI18n('noRecords'));
-    return;
-  }
-
+function buildIntervalsCsv() {
   const rows = [
     ['持续时间（分钟）', '格式化时间', '备注', '标签', '结束时间']
   ];
@@ -55,18 +54,46 @@ function exportIntervalsToCSV() {
     ]);
   });
 
-  const csv = rows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+  return rows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+}
+
+function downloadCsvContent(csv, filename) {
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-
-  const now = new Date();
-  const filename = `${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
-
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function buildNormalCsvFilename(now) {
+  return `${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
+}
+
+function buildBackupCsvFilename(now) {
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `backup_${stamp}.csv`;
+}
+
+function exportIntervalsToCSV() {
+  if (!intervals.length) {
+    alert(getI18n('noRecords'));
+    return;
+  }
+  const csv = buildIntervalsCsv();
+  downloadCsvContent(csv, buildNormalCsvFilename(new Date()));
+}
+
+function exportBackupCSVNoClear() {
+  if (!intervals.length) {
+    alert(getI18n('noRecords'));
+    return;
+  }
+  const now = new Date();
+  const csv = buildIntervalsCsv();
+  downloadCsvContent(csv, buildBackupCsvFilename(now));
+  return now;
 }
 
 function updateDisplay() {
@@ -92,11 +119,14 @@ function renderIntervals() {
     div.className = 'interval-record';
     const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '--';
     const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
+    const advancedFields = isAdvancedMode ? `
+      <div>Tag: <input value="${item.tag || ''}" oninput="updateTag(${trueIndex}, this.value)"></div>
+      <div>指定时间（分钟）: <input type="number" value="${item.setDuration || ''}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
+    ` : '';
     div.innerHTML = `
       <div><strong class="duration">${mins} 分钟</strong></div>
-      <div>Tag: <input value="${item.tag || ''}" oninput="updateTag(${trueIndex}, this.value)"></div>
       <div>Memo: <input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)"></div>
-      <div>指定时间（分钟）: <input type="number" value="${item.setDuration || ''}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
+      ${advancedFields}
       <div>结束时间: ${endTimeStr}</div>
       <button onclick="parseMemo(${trueIndex})">解析Memo</button>
       <button onclick="undoParse(${trueIndex})">撤销</button>
@@ -104,6 +134,50 @@ function renderIntervals() {
     if (item.parsed) div.style.background = '#eee';
     container.appendChild(div);
   });
+}
+
+function getAdvancedToggleLabel() {
+  const lang = window.currentLang || 'zh';
+  const labels = {
+    off: {
+      zh: '🧩 高级模式：关',
+      mix: '🧩 高级模式：关',
+      en: '🧩 Advanced: Off'
+    },
+    on: {
+      zh: '🧩 高级模式：开',
+      mix: '🧩 高级模式：开',
+      en: '🧩 Advanced: On'
+    }
+  };
+  return (isAdvancedMode ? labels.on : labels.off)[lang] || (isAdvancedMode ? labels.on.zh : labels.off.zh);
+}
+
+function updateAdvancedModeUI() {
+  const btn = document.getElementById('advanced-toggle');
+  if (btn) {
+    btn.textContent = getAdvancedToggleLabel();
+    btn.classList.toggle('is-on', isAdvancedMode);
+  }
+
+  const exportTabBtn = document.getElementById('tab-export-btn');
+  if (exportTabBtn) {
+    exportTabBtn.style.display = isAdvancedMode ? '' : 'none';
+  }
+
+  if (!isAdvancedMode) {
+    const exportTab = document.getElementById('tab-export');
+    if (exportTab && exportTab.style.display !== 'none') {
+      showTab('tab-log');
+    }
+  }
+  renderIntervals();
+}
+
+function toggleAdvancedMode() {
+  isAdvancedMode = !isAdvancedMode;
+  localStorage.setItem(ADVANCED_MODE_KEY, isAdvancedMode ? '1' : '0');
+  updateAdvancedModeUI();
 }
 
 function rememberInterval() {
@@ -311,12 +385,184 @@ Rule Explanation:
     zh: '⏸️ 已关闭坚果云自动备份',
     mix: '⏸️ 已关闭坚果云自动备份',
     en: '⏸️ Nutstore auto backup disabled'
+  },
+  backupReminderSaved: {
+    zh: '✅ 备份提醒配置已保存',
+    mix: '✅ 备份提醒配置已保存',
+    en: '✅ Backup reminder settings saved'
+  },
+  backupReminderOn: {
+    zh: '✅ 已启用定时备份提醒',
+    mix: '✅ 已启用定时备份提醒',
+    en: '✅ Periodic backup reminder enabled'
+  },
+  backupReminderOff: {
+    zh: '⏸️ 已关闭定时备份提醒',
+    mix: '⏸️ 已关闭定时备份提醒',
+    en: '⏸️ Periodic backup reminder disabled'
+  },
+  backupReminderRisk: {
+    zh: '一旦浏览器更新或清理 localStorage，未备份数据可能丢失。',
+    mix: '一旦浏览器更新或清理 localStorage，未备份数据可能丢失。',
+    en: 'If browser updates or clears localStorage, unbacked data may be lost.'
+  },
+  backupReminderNever: {
+    zh: '你还没有下载过备份。',
+    mix: '你还没有下载过备份。',
+    en: 'No backup has been downloaded yet.'
   }
 };
 
 function getI18n(key) {
   const lang = window.currentLang || 'zh';
   return (i18n[key] && i18n[key][lang]) || i18n[key]?.zh || '';
+}
+
+function getBackupReminderConfig() {
+  const fallback = {
+    intervalHours: 2,
+    enabled: false,
+    lastDownloadedAt: ''
+  };
+  const raw = localStorage.getItem(BACKUP_REMINDER_CFG_KEY);
+  if (!raw) return fallback;
+  try {
+    return { ...fallback, ...JSON.parse(raw) };
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function setBackupReminderConfig(config) {
+  localStorage.setItem(BACKUP_REMINDER_CFG_KEY, JSON.stringify(config));
+}
+
+function setBackupReminderStatus(message, isError = false) {
+  const el = document.getElementById('backup-reminder-status');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = isError ? '#b91c1c' : '#444';
+}
+
+function applyBackupReminderConfigToUI(config) {
+  const input = document.getElementById('backup-reminder-hours');
+  if (!input) return;
+  input.value = String(Math.max(1, Number(config.intervalHours) || 2));
+}
+
+function readBackupReminderConfigFromUI() {
+  const prev = getBackupReminderConfig();
+  const input = document.getElementById('backup-reminder-hours');
+  return {
+    ...prev,
+    intervalHours: Math.max(1, Number(input?.value || prev.intervalHours || 2))
+  };
+}
+
+function updateBackupReminderToggleButton() {
+  const btn = document.getElementById('backup-reminder-toggle-btn');
+  if (!btn) return;
+  const lang = window.currentLang || 'zh';
+  const enabled = getBackupReminderConfig().enabled;
+  const text = enabled
+    ? { zh: '⏸️ 关闭提醒', mix: '⏸️ 关闭提醒', en: '⏸️ Stop Reminder' }
+    : { zh: '▶️ 启用提醒', mix: '▶️ 启用提醒', en: '▶️ Start Reminder' };
+  btn.textContent = text[lang] || text.zh;
+}
+
+function formatElapsedSince(isoString) {
+  if (!isoString) return null;
+  const start = new Date(isoString).getTime();
+  if (!Number.isFinite(start)) return null;
+  let diff = Date.now() - start;
+  if (diff < 0) diff = 0;
+  const totalMinutes = Math.floor(diff / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  return { days, hours, minutes };
+}
+
+function buildBackupReminderMessage(lastDownloadedAt) {
+  const lang = window.currentLang || 'zh';
+  const elapsed = formatElapsedSince(lastDownloadedAt);
+  if (!elapsed) {
+    if (lang === 'en') {
+      return `${getI18n('backupReminderNever')} ${getI18n('backupReminderRisk')}`;
+    }
+    return `上次备份后已经很久未备份（尚无备份记录）。${getI18n('backupReminderRisk')}`;
+  }
+
+  if (lang === 'en') {
+    return `It has been ${elapsed.days}d ${elapsed.hours}h ${elapsed.minutes}m since your last backup. ${getI18n('backupReminderRisk')}`;
+  }
+  return `上次备份后已经 ${elapsed.days}天${elapsed.hours}小时${elapsed.minutes}分钟 没备份。${getI18n('backupReminderRisk')}`;
+}
+
+function openBackupReminderDialog(message) {
+  const dialog = document.getElementById('backup-reminder-dialog');
+  const messageEl = document.getElementById('backup-reminder-message');
+  if (!dialog || !messageEl) return;
+  messageEl.textContent = message;
+  dialog.style.display = 'block';
+}
+
+function closeBackupReminderDialog() {
+  const dialog = document.getElementById('backup-reminder-dialog');
+  if (!dialog) return;
+  dialog.style.display = 'none';
+}
+
+function downloadBackupNowFromReminder() {
+  const cfg = getBackupReminderConfig();
+  const downloadedAt = exportBackupCSVNoClear();
+  if (!downloadedAt) return;
+  const nextCfg = { ...cfg, lastDownloadedAt: downloadedAt.toISOString() };
+  setBackupReminderConfig(nextCfg);
+  setBackupReminderStatus(`已下载：${new Date(nextCfg.lastDownloadedAt).toLocaleString()}`);
+  closeBackupReminderDialog();
+}
+
+function triggerBackupReminderPrompt() {
+  const cfg = getBackupReminderConfig();
+  if (!cfg.enabled) return;
+  const message = buildBackupReminderMessage(cfg.lastDownloadedAt);
+  openBackupReminderDialog(message);
+}
+
+function startBackupReminder() {
+  if (backupReminderTimer) {
+    clearInterval(backupReminderTimer);
+    backupReminderTimer = null;
+  }
+  const cfg = getBackupReminderConfig();
+  if (!cfg.enabled) return;
+  const delayMs = Math.max(1, Number(cfg.intervalHours) || 2) * 60 * 60 * 1000;
+  backupReminderTimer = setInterval(triggerBackupReminderPrompt, delayMs);
+}
+
+function saveBackupReminderConfig() {
+  const cfg = readBackupReminderConfigFromUI();
+  setBackupReminderConfig(cfg);
+  if (cfg.enabled) startBackupReminder();
+  setBackupReminderStatus(getI18n('backupReminderSaved'));
+}
+
+function toggleBackupReminder() {
+  const cfg = readBackupReminderConfigFromUI();
+  cfg.enabled = !cfg.enabled;
+  setBackupReminderConfig(cfg);
+  updateBackupReminderToggleButton();
+  if (cfg.enabled) {
+    startBackupReminder();
+    setBackupReminderStatus(getI18n('backupReminderOn'));
+  } else {
+    if (backupReminderTimer) {
+      clearInterval(backupReminderTimer);
+      backupReminderTimer = null;
+    }
+    setBackupReminderStatus(getI18n('backupReminderOff'));
+  }
 }
 
 function getNutstoreConfig() {
@@ -581,6 +827,8 @@ function importBackupFromCSV() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  showTab('tab-timer');
+  updateAdvancedModeUI();
   listAllBackups(); // 页面加载后展示备份列表
   const config = getNutstoreConfig();
   applyNutstoreConfigToUI(config);
@@ -590,6 +838,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (config.enabled) {
     startNutstoreAutoBackup();
+  }
+
+  const reminderConfig = getBackupReminderConfig();
+  applyBackupReminderConfigToUI(reminderConfig);
+  updateBackupReminderToggleButton();
+  if (reminderConfig.lastDownloadedAt) {
+    setBackupReminderStatus(`上次下载备份：${new Date(reminderConfig.lastDownloadedAt).toLocaleString()}`);
+  }
+  if (reminderConfig.enabled) {
+    startBackupReminder();
   }
 });
 
@@ -966,21 +1224,97 @@ function exportTomatoPotato() {
 
 </script>
   <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --panel-2: #1a233f;
+      --text: #e6ecff;
+      --muted: #9fb0d6;
+      --border: #2b355a;
+      --accent: #4da3ff;
+      --danger: #ff6b6b;
+    }
+    body {
+      background: radial-gradient(1200px 700px at 20% -10%, #1f2d57 0%, var(--bg) 55%);
+      color: var(--text);
+      margin: 1rem;
+      font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    }
+    h1, h2, h3 { color: var(--text); }
+    .tab-content {
+      margin-top: 0.8rem;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(19, 26, 46, 0.72);
+      backdrop-filter: blur(3px);
+    }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 3.6rem;
+    }
+    button {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.42rem 0.7rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    input, textarea, select {
+      background: #0f1730;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.45rem;
+    }
+    pre {
+      background: #0e1630;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem;
+    }
+    table, th, td {
+      border: 1px solid var(--border);
+      border-collapse: collapse;
+    }
+    th, td { padding: 0.2rem; }
+    .interval-record {
+      background: rgba(26, 35, 63, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
     #lang-toggle {
       position: absolute;
       top: 1rem;
       right: 1rem;
     }
+    #advanced-toggle {
+      position: absolute;
+      top: 3.25rem;
+      right: 1rem;
+    }
+    #advanced-toggle.is-on {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(77, 163, 255, 0.35);
+    }
   </style>
 </head>
 <body>
   <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
+  <button id="advanced-toggle" onclick="toggleAdvancedMode()">🧩 高级模式：关</button>
   <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="tabs">
     <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
     <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义备注解析规则" data-mix="定义Memo解析规则" data-en="Memo Parsing Rules">定义备注解析规则</button>
-    <button class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export">番茄土豆格式导出</button>
     <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志和备份" data-mix="运行日志和备份" data-en="Log & Backups">运行日志和备份</button>
+    <button id="tab-export-btn" class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export" style="display:none">番茄土豆格式导出</button>
 
   </div>
 
@@ -1006,8 +1340,6 @@ function exportTomatoPotato() {
       <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
     </section>
     <div id="interval-controls"></div>
-    <button onclick="triggerManualBackup()" data-zh="💾 手动备份" data-mix="💾 手动备份" data-en="💾 Manual Backup">💾 手动备份</button>
-    <button onclick="restoreLatestBackup()" data-zh="🕘 恢复历史备份" data-mix="🕘 恢复历史备份" data-en="🕘 Restore Backup">🕘 恢复历史备份</button>
 
     <section id="intervals-section">
       <h2 data-zh="历史记录" data-mix="历史记录" data-en="History">历史记录</h2>
@@ -1035,6 +1367,8 @@ function exportTomatoPotato() {
     <button onclick="refreshLog()" data-zh="🔄 刷新日志" data-mix="🔄 刷新日志" data-en="🔄 Refresh Log">🔄 刷新日志</button>
     <button onclick="copyLog()" data-zh="📋 复制日志" data-mix="📋 复制日志" data-en="📋 Copy Log">📋 复制日志</button>
     <button onclick="clearLog()" data-zh="🗑️ 清空日志" data-mix="🗑️ 清空日志" data-en="🗑️ Clear Log">🗑️ 清空日志</button>
+    <button onclick="triggerManualBackup()" data-zh="💾 手动备份" data-mix="💾 手动备份" data-en="💾 Manual Backup">💾 手动备份</button>
+    <button onclick="restoreLatestBackup()" data-zh="🕘 恢复历史备份" data-mix="🕘 恢复历史备份" data-en="🕘 Restore Backup">🕘 恢复历史备份</button>
     <pre id="log-content"></pre>
     <h3 data-zh="📂 可用备份列表" data-mix="📂 可用备份列表" data-en="📂 Available Backups">📂 可用备份列表</h3>
     <div id="backup-list"></div>
@@ -1070,6 +1404,25 @@ function exportTomatoPotato() {
       </div>
       <div id="nutstore-status" style="font-size:0.9rem; color:#444;"></div>
     </div>
+    <hr>
+    <h3 data-zh="⏰ 定时提醒下载备份" data-mix="⏰ 定时提醒下载备份" data-en="⏰ Scheduled Backup Reminder">⏰ 定时提醒下载备份</h3>
+    <div id="backup-reminder-config" style="display:grid; gap:0.5rem; max-width:640px;">
+      <label>
+        <span data-zh="提醒间隔（小时）" data-mix="提醒间隔（小时）" data-en="Reminder Interval (hours)">提醒间隔（小时）</span>
+        <input id="backup-reminder-hours" type="number" min="1" step="1" value="2">
+      </label>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <button onclick="saveBackupReminderConfig()" data-zh="💾 保存提醒配置" data-mix="💾 保存提醒配置" data-en="💾 Save Reminder">💾 保存提醒配置</button>
+        <button onclick="toggleBackupReminder()" id="backup-reminder-toggle-btn" data-zh="▶️ 启用提醒" data-mix="▶️ 启用提醒" data-en="▶️ Start Reminder">▶️ 启用提醒</button>
+      </div>
+      <div data-zh="触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。"
+           data-mix="触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。"
+           data-en="A popup appears at schedule time; click \"Download Backup Now\" to download backup_*.csv without clearing records."
+           style="font-size:0.88rem; color:#666;">
+        触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。
+      </div>
+      <div id="backup-reminder-status" style="font-size:0.9rem; color:#444;"></div>
+    </div>
     
   </div>
 
@@ -1077,6 +1430,16 @@ function exportTomatoPotato() {
     <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
     <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
     <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-mix="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
+  </div>
+
+  <div id="backup-reminder-dialog" style="display:none; padding:1em; background:#0f1730; border:1px solid #2b355a; border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+    <h3 data-zh="⚠️ 备份提醒" data-mix="⚠️ 备份提醒" data-en="⚠️ Backup Reminder">⚠️ 备份提醒</h3>
+    <p id="backup-reminder-message" style="line-height:1.5;"></p>
+    <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.8rem;">
+      <button onclick="closeBackupReminderDialog()" data-zh="稍后再说" data-mix="稍后再说" data-en="Later">稍后再说</button>
+      <button onclick="downloadBackupNowFromReminder()" data-zh="现在下载备份" data-mix="现在下载备份" data-en="Download Backup Now">现在下载备份</button>
+    </div>
+  </div>
   <footer>
     <hr>
     <small>参考了原网页 https://stopwatch.online-timers.com/stopwatch-with-time-intervals 的功能，由 ChatGPT 重新编写代码并添加了个性化修改。<br>项目地址：<a href="https://github.com/SamZebrado/LocalStopWatch" target="_blank">https://github.com/SamZebrado/LocalStopWatch</a></small>
@@ -1119,8 +1482,14 @@ function exportTomatoPotato() {
       en: '🌐 English'
     };
     document.getElementById('lang-toggle').textContent = labelMap[nextLang];
+    if (typeof updateAdvancedModeUI === 'function') {
+      updateAdvancedModeUI();
+    }
     if (typeof updateNutstoreToggleButton === 'function') {
       updateNutstoreToggleButton();
+    }
+    if (typeof updateBackupReminderToggleButton === 'function') {
+      updateBackupReminderToggleButton();
     }
   }
 
