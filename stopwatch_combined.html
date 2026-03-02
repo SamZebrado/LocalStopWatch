@@ -18,10 +18,16 @@ const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
 const BACKUP_REMINDER_CFG_KEY = 'backup_download_reminder_cfg_v1';
 const ADVANCED_MODE_KEY = 'advanced_mode_enabled_v1';
 const THEME_KEY = 'ui_theme_id_v1';
+const UI_FONT_SIZE_KEY = 'ui_font_size_px_v1';
+const UI_BUTTON_SIZE_KEY = 'ui_button_size_px_v1';
+const UI_TITLE_SIZE_KEY = 'ui_title_size_px_v1';
 const NUTSTORE_FEATURE_ENABLED = false;
 let nutstoreAutoTimer = null;
 let backupReminderTimer = null;
 let isAdvancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === '1';
+let uiFontSize = Number(localStorage.getItem(UI_FONT_SIZE_KEY)) || 18;
+let uiButtonSize = Number(localStorage.getItem(UI_BUTTON_SIZE_KEY)) || 16;
+let uiTitleSize = Number(localStorage.getItem(UI_TITLE_SIZE_KEY)) || 32;
 let advancedPressTimer = null;
 let advancedLongPressTriggered = false;
 
@@ -106,7 +112,7 @@ function downloadCsvContent(csv, filename) {
 }
 
 function buildNormalCsvFilename(now) {
-  return `${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
+  return `Uncleared_${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
 }
 
 function buildBackupCsvFilename(now) {
@@ -137,14 +143,23 @@ function exportBackupCSVNoClear() {
 function updateDisplay() {
   const now = Date.now();
   const elapsed = now - t_Last;
+  const firstStart = getFirstIntervalStartTime();
 
   document.getElementById('current-duration').textContent = formatTime(elapsed);
   document.getElementById('absolute-time').textContent = new Date(now).toLocaleTimeString();
   document.getElementById('absolute-date').textContent = new Date(now).toLocaleDateString();
-  document.getElementById('initial-time').textContent = new Date(t_Initial).toLocaleTimeString();
-  document.getElementById('initial-date').textContent = new Date(t_Initial).toLocaleDateString();
+  document.getElementById('initial-time').textContent = new Date(firstStart).toLocaleTimeString();
+  document.getElementById('initial-date').textContent = new Date(firstStart).toLocaleDateString();
 
   requestAnimationFrame(updateDisplay);
+}
+
+function getFirstIntervalStartTime() {
+  if (!intervals.length) return t_Initial;
+  const first = intervals[0];
+  const end = Number(first.endTime) || t_Initial;
+  const dur = Number(first.durationMs) || 0;
+  return end - dur;
 }
 
 function renderIntervals() {
@@ -181,13 +196,13 @@ function getAdvancedToggleLabel() {
   const themeName = (theme.labels && (theme.labels[lang] || theme.labels.zh)) || theme.id;
   const labels = {
     off: {
-      zh: `🧩 高级模式：关 | 主题：${themeName}（长按换色）`,
-      mix: `🧩 高级模式：关 | Theme: ${themeName}（长按换色）`,
+      zh: `🧩 高级模式：关 | 主题：${themeName}（长按选主题）`,
+      mix: `🧩 高级模式：关 | Theme: ${themeName}（长按选主题）`,
       en: `🧩 Advanced: Off | Theme: ${themeName} (Long Press)`
     },
     on: {
-      zh: `🧩 高级模式：开 | 主题：${themeName}（长按换色）`,
-      mix: `🧩 高级模式：开 | Theme: ${themeName}（长按换色）`,
+      zh: `🧩 高级模式：开 | 主题：${themeName}（长按选主题）`,
+      mix: `🧩 高级模式：开 | Theme: ${themeName}（长按选主题）`,
       en: `🧩 Advanced: On | Theme: ${themeName} (Long Press)`
     }
   };
@@ -295,6 +310,87 @@ function bindAdvancedButtonEvents() {
   btn.addEventListener('click', onAdvancedButtonClick);
 }
 
+function clampUiSize(v) {
+  return Math.max(1, Math.min(50, Number(v) || 1));
+}
+
+function applyUIFontSize(sizePx) {
+  const v = clampUiSize(sizePx);
+  uiFontSize = v;
+  localStorage.setItem(UI_FONT_SIZE_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-font-size', `${v}px`);
+  const input = document.getElementById('font-size-input');
+  if (input) input.dataset.lastValid = String(v);
+}
+
+function applyUIButtonSize(sizePx) {
+  const v = clampUiSize(sizePx);
+  uiButtonSize = v;
+  localStorage.setItem(UI_BUTTON_SIZE_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-button-font-size', `${v}px`);
+  const py = Math.max(0.2, v * 0.22).toFixed(2);
+  const px = Math.max(0.4, v * 0.45).toFixed(2);
+  document.documentElement.style.setProperty('--ui-button-pad-y', `${py}rem`);
+  document.documentElement.style.setProperty('--ui-button-pad-x', `${px}rem`);
+  const input = document.getElementById('button-size-input');
+  if (input) input.dataset.lastValid = String(v);
+  autoFitButtonText();
+}
+
+function applyUITitleSize(sizePx) {
+  const v = clampUiSize(sizePx);
+  uiTitleSize = v;
+  localStorage.setItem(UI_TITLE_SIZE_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-h1-size', `${v}px`);
+  document.documentElement.style.setProperty('--ui-h2-size', `${Math.max(1, Math.round(v * 0.65))}px`);
+  document.documentElement.style.setProperty('--ui-h3-size', `${Math.max(1, Math.round(v * 0.56))}px`);
+  const input = document.getElementById('title-size-input');
+  if (input) input.dataset.lastValid = String(v);
+}
+
+function onUiSizeInput(kind, value) {
+  if (value === '') return;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return;
+  if (n < 1 || n > 50) return;
+  if (kind === 'font') applyUIFontSize(n);
+  if (kind === 'button') applyUIButtonSize(n);
+  if (kind === 'title') applyUITitleSize(n);
+}
+
+function onUiSizeBlur(kind, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const fallback = Number(input.dataset.lastValid || input.defaultValue || 18);
+  const raw = input.value.trim();
+  if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < 1 || Number(raw) > 50) {
+    input.value = String(fallback);
+    return;
+  }
+  onUiSizeInput(kind, raw);
+  input.value = String(clampUiSize(raw));
+}
+
+function syncUiSizeInputs() {
+  const f = document.getElementById('font-size-input');
+  const b = document.getElementById('button-size-input');
+  const t = document.getElementById('title-size-input');
+  if (f) { f.value = String(uiFontSize); f.dataset.lastValid = String(uiFontSize); }
+  if (b) { b.value = String(uiButtonSize); b.dataset.lastValid = String(uiButtonSize); }
+  if (t) { t.value = String(uiTitleSize); t.dataset.lastValid = String(uiTitleSize); }
+}
+
+function autoFitButtonText() {
+  const buttons = Array.from(document.querySelectorAll('button'));
+  buttons.forEach(btn => {
+    const rect = btn.getBoundingClientRect();
+    const area = Math.max(1, rect.width * rect.height);
+    const areaMax = Math.max(10, Math.floor(Math.sqrt(area) * 0.22));
+    const target = Math.min(uiButtonSize, areaMax);
+    btn.style.fontSize = `${target}px`;
+  });
+}
+
 function updateAdvancedModeUI() {
   const btn = document.getElementById('advanced-toggle');
   if (btn) {
@@ -313,6 +409,10 @@ function updateAdvancedModeUI() {
       showTab('tab-log');
     }
   }
+  const sizeCtl = document.getElementById('font-size-control');
+  if (sizeCtl) sizeCtl.style.display = isAdvancedMode ? '' : 'none';
+  syncUiSizeInputs();
+  autoFitButtonText();
   renderIntervals();
 }
 
@@ -970,6 +1070,10 @@ function importBackupFromCSV() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  applyUIFontSize(uiFontSize);
+  applyUIButtonSize(uiButtonSize);
+  applyUITitleSize(uiTitleSize);
+  syncUiSizeInputs();
   bindAdvancedButtonEvents();
   showTab('tab-timer');
   updateAdvancedModeUI();
@@ -1388,14 +1492,25 @@ function exportTomatoPotato() {
       --record-bg: #121212;
       --dialog-bg: #0f0f0f;
       --dialog-shadow: 0 8px 32px rgba(0,0,0,0.55);
+      --ui-font-size: 18px;
+      --ui-button-font-size: 16px;
+      --ui-button-pad-y: 0.42rem;
+      --ui-button-pad-x: 0.70rem;
+      --ui-h1-size: 32px;
+      --ui-h2-size: 21px;
+      --ui-h3-size: 18px;
     }
     body {
       background: var(--bg);
       color: var(--text);
       margin: 1rem;
       font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      font-size: var(--ui-font-size);
     }
     h1, h2, h3 { color: var(--text); }
+    h1 { font-size: var(--ui-h1-size); margin: 0.25rem 0 0.55rem; }
+    h2 { font-size: var(--ui-h2-size); }
+    h3 { font-size: var(--ui-h3-size); }
     .tab-content {
       margin-top: 0.8rem;
       padding: 0.8rem;
@@ -1404,17 +1519,18 @@ function exportTomatoPotato() {
       background: var(--tab-bg);
     }
     .tabs {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.5rem;
-      flex-wrap: wrap;
-      margin-top: 3.6rem;
+      margin-top: 1rem;
     }
     button {
       background: var(--panel-2);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 0.42rem 0.7rem;
+      font-size: var(--ui-button-font-size);
+      padding: var(--ui-button-pad-y) var(--ui-button-pad-x);
       cursor: pointer;
     }
     button:hover { border-color: var(--accent); }
@@ -1448,7 +1564,12 @@ function exportTomatoPotato() {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      justify-content: flex-end;
+      justify-content: flex-start;
+    }
+    .top-actions button,
+    .tab-button {
+      min-height: 50px;
+      font-weight: 600;
     }
     #advanced-toggle.is-on {
       border-color: var(--accent);
@@ -1456,36 +1577,37 @@ function exportTomatoPotato() {
     }
     #control-section {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
+      flex-direction: column;
+      gap: 0.55rem;
+      align-items: stretch;
     }
     #control-section input {
-      flex: 1 1 320px;
-      min-width: 220px;
+      width: 100%;
+      min-width: 0;
     }
-    #control-section button {
-      flex: 0 1 auto;
+    .control-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      width: 100%;
     }
-    .tab-button {
-      flex: 0 1 auto;
+    .control-row-primary button {
+      flex: 1 1 100%;
+      min-height: 62px;
+      font-weight: 700;
+      border-width: 2px;
     }
+    .control-row-secondary button {
+      flex: 1 1 calc(50% - 0.5rem);
+      min-width: 0;
+    }
+    .tab-button { width: 100%; }
+    #tab-btn-timer, #tab-export-btn { grid-column: 1 / -1; }
+    #tab-btn-timer { min-height: 58px; font-weight: 700; border-width: 2px; }
     @media (max-width: 780px) {
       body { margin: 0.7rem; }
       .top-actions { justify-content: stretch; }
       .top-actions button {
-        flex: 1 1 calc(50% - 0.5rem);
-        min-width: 0;
-      }
-      .tabs .tab-button {
-        flex: 1 1 calc(50% - 0.5rem);
-        min-width: 0;
-      }
-      #control-section input {
-        flex: 1 1 100%;
-        min-width: 0;
-      }
-      #control-section button {
         flex: 1 1 calc(50% - 0.5rem);
         min-width: 0;
       }
@@ -1497,13 +1619,29 @@ function exportTomatoPotato() {
   </style>
 </head>
 <body>
+  <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="top-actions">
     <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
     <button id="advanced-toggle">🧩 高级模式：关</button>
   </div>
-  <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
+  <div id="font-size-control" style="display:none; margin-top:0.55rem; border:1px solid var(--border); border-radius:10px; padding:0.6rem;">
+    <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+      <label data-zh="文字字号(非标题)" data-mix="文字字号(非标题)" data-en="Text Size" for="font-size-input">文字字号(非标题)</label>
+      <input id="font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('font', this.value)" onblur="onUiSizeBlur('font','font-size-input')" style="width:5.2rem;">
+      <label data-zh="按钮字号" data-mix="按钮字号" data-en="Button Size" for="button-size-input">按钮字号</label>
+      <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')" style="width:5.2rem;">
+      <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
+      <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')" style="width:5.2rem;">
+    </div>
+    <div data-zh="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
+         data-mix="范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。"
+         data-en="Range 1-50. You can clear then type; on blur, empty input restores last valid value."
+         style="margin-top:0.4rem; color:var(--muted);">
+      范围 1-50；可先清空再输入。若清空后离开输入框，将保持上次有效值。
+    </div>
+  </div>
   <div class="tabs">
-    <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
+    <button id="tab-btn-timer" class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
     <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义备注解析规则" data-mix="定义Memo解析规则" data-en="Memo Parsing Rules">定义备注解析规则</button>
     <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志和备份" data-mix="运行日志和备份" data-en="Log & Backups">运行日志和备份</button>
     <button id="tab-export-btn" class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export" style="display:none">番茄土豆格式导出</button>
@@ -1527,9 +1665,13 @@ function exportTomatoPotato() {
 
     <section id="control-section">
       <input id="memo-input" placeholder="当前记录段的备注..." maxlength="1000">
-      <button onclick="rememberInterval()" data-zh="📌 记下" data-mix="📌 记下" data-en="📌 Remember">📌 记下</button>
-      <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
-      <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
+      <div class="control-row control-row-primary">
+        <button onclick="rememberInterval()" data-zh="📌 记下" data-mix="📌 记下" data-en="📌 Remember">📌 记下</button>
+      </div>
+      <div class="control-row control-row-secondary">
+        <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
+        <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
+      </div>
     </section>
     <div id="interval-controls"></div>
 

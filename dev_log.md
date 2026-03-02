@@ -75,3 +75,34 @@
 - Runtime simulation passed:
   - reminder dialog opens
   - hidden Nutstore section remains hidden on init
+
+## 2026-03-02 (UI Refinement + Accessibility, by CodeX/Codex)
+
+### Implemented
+- Timer controls layout refinement:
+  - `记下` button is now on its own row, taller and thicker to reduce mis-taps
+  - `导出并清空记录` + `导出CSV` share a single row
+- CSV filename update:
+  - regular export now prefixes filename with `Uncleared_`
+- Fixed first-interval start-time display:
+  - now computes from first interval (`first.endTime - first.durationMs`) instead of using `t_Initial` directly
+- Header and tab layout updates:
+  - language and advanced buttons moved below title
+  - timer tab button occupies its own row
+  - rules + log tabs share one row
+- Added advanced-mode persistent size controls (range `1-50`):
+  - non-title text size
+  - button size
+  - title size
+- Input behavior improvement for size controls:
+  - users can clear the input first, then type new value
+  - if left empty on blur, previous valid value is kept/restored
+- Button text auto-fit guard:
+  - button font size is capped by button area to avoid overflow
+
+### Automated Testing
+- Inline script syntax checks passed (all script blocks).
+- Runtime simulation passed:
+  - size controls persist in localStorage
+  - advanced panel visibility works
+  - theme picker still works
