@@ -187,6 +187,12 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 - “手动备份”和“恢复历史备份”按钮已从计时器页迁移到“运行日志和备份”页，避免误触。
 - 外观改为默认深色（黑灰系），移除蓝色主色以降低夜间刺激。
 - 因浏览器 CORS 限制，坚果云功能暂时默认隐藏（代码保留，后续可恢复）。
+- 高级模式按钮支持“长按打开主题列表”：
+  - 可选时髦主题：黑曜、石墨灰、瓷白、钴蓝、琥珀橙、暮紫（不含绿色）；
+  - 主题选择会持久化保存。
+- `stopwatch_combined.html` 已增加手机友好响应式布局：
+  - 放大或窄屏时按钮会自动换行，避免超出屏幕。
+- `stopwatch_mobile.html` 已从仓库移除，统一由 `stopwatch_combined.html` 负责桌面与手机显示。
 
 ---
 

@@ -3,6 +3,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>本地网页秒表</title>
   <script>
 // timer.js
@@ -1443,25 +1444,63 @@ function exportTomatoPotato() {
       padding: 0.5rem;
       margin-bottom: 0.45rem;
     }
-    #lang-toggle {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
-    }
-    #advanced-toggle {
-      position: absolute;
-      top: 3.25rem;
-      right: 1rem;
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
     }
     #advanced-toggle.is-on {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(122, 122, 122, 0.35);
     }
+    #control-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    #control-section input {
+      flex: 1 1 320px;
+      min-width: 220px;
+    }
+    #control-section button {
+      flex: 0 1 auto;
+    }
+    .tab-button {
+      flex: 0 1 auto;
+    }
+    @media (max-width: 780px) {
+      body { margin: 0.7rem; }
+      .top-actions { justify-content: stretch; }
+      .top-actions button {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 0;
+      }
+      .tabs .tab-button {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 0;
+      }
+      #control-section input {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+      #control-section button {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 0;
+      }
+      button {
+        white-space: normal;
+        word-break: break-word;
+      }
+    }
   </style>
 </head>
 <body>
-  <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
-  <button id="advanced-toggle">🧩 高级模式：关</button>
+  <div class="top-actions">
+    <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
+    <button id="advanced-toggle">🧩 高级模式：关</button>
+  </div>
   <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="tabs">
     <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
