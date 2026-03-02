@@ -16,10 +16,46 @@ const NUTSTORE_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
 const BACKUP_REMINDER_CFG_KEY = 'backup_download_reminder_cfg_v1';
 const ADVANCED_MODE_KEY = 'advanced_mode_enabled_v1';
+const THEME_KEY = 'ui_theme_id_v1';
 const NUTSTORE_FEATURE_ENABLED = false;
 let nutstoreAutoTimer = null;
 let backupReminderTimer = null;
 let isAdvancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === '1';
+let advancedPressTimer = null;
+let advancedLongPressTriggered = false;
+
+const THEMES = [
+  {
+    id: 'noir',
+    labels: { zh: '黑曜', mix: '黑曜', en: 'Noir' },
+    vars: { bg: '#000000', panel: '#0a0a0a', panel2: '#131313', text: '#e9e9e9', muted: '#a3a3a3', border: '#2a2a2a', accent: '#7a7a7a', danger: '#d46a6a', input: '#141414', pre: '#101010', tab: '#0f0f0f', record: '#121212', dialog: '#0f0f0f', shadow: '0 8px 32px rgba(0,0,0,0.55)' }
+  },
+  {
+    id: 'graphite',
+    labels: { zh: '石墨灰', mix: '石墨灰', en: 'Graphite' },
+    vars: { bg: '#111111', panel: '#171717', panel2: '#1f1f1f', text: '#ececec', muted: '#b8b8b8', border: '#3a3a3a', accent: '#8f8f8f', danger: '#d87979', input: '#202020', pre: '#1c1c1c', tab: '#191919', record: '#202020', dialog: '#181818', shadow: '0 8px 28px rgba(0,0,0,0.5)' }
+  },
+  {
+    id: 'porcelain',
+    labels: { zh: '瓷白', mix: '瓷白', en: 'Porcelain' },
+    vars: { bg: '#f4f4f2', panel: '#ffffff', panel2: '#ececeb', text: '#202020', muted: '#5d5d5d', border: '#cfcfcf', accent: '#7f7f7f', danger: '#b45050', input: '#ffffff', pre: '#f1f1f1', tab: '#ffffff', record: '#f7f7f7', dialog: '#ffffff', shadow: '0 10px 24px rgba(0,0,0,0.14)' }
+  },
+  {
+    id: 'cobalt',
+    labels: { zh: '钴蓝', mix: '钴蓝', en: 'Cobalt' },
+    vars: { bg: '#0a1020', panel: '#131b33', panel2: '#1d2744', text: '#e9efff', muted: '#9fb0d8', border: '#2f3d62', accent: '#7da7ff', danger: '#e08080', input: '#171f38', pre: '#131b31', tab: '#121a31', record: '#1a2340', dialog: '#121a31', shadow: '0 8px 32px rgba(0,0,0,0.5)' }
+  },
+  {
+    id: 'amber',
+    labels: { zh: '琥珀橙', mix: '琥珀橙', en: 'Amber' },
+    vars: { bg: '#1a120a', panel: '#23180e', panel2: '#2f2012', text: '#ffeede', muted: '#d7bda1', border: '#5d3e22', accent: '#ffb164', danger: '#f38f80', input: '#2a1b10', pre: '#26190f', tab: '#24180f', record: '#2a1d12', dialog: '#24180f', shadow: '0 8px 32px rgba(0,0,0,0.48)' }
+  },
+  {
+    id: 'mauve',
+    labels: { zh: '暮紫', mix: '暮紫', en: 'Mauve' },
+    vars: { bg: '#141018', panel: '#1b1621', panel2: '#251d2d', text: '#f2eaff', muted: '#baa7cf', border: '#3f3350', accent: '#c49cff', danger: '#df8a98', input: '#221b2b', pre: '#1e1826', tab: '#1c1723', record: '#241d2f', dialog: '#1c1723', shadow: '0 8px 32px rgba(0,0,0,0.5)' }
+  }
+];
 
 function pad(n, z = 2) { return ('00' + n).slice(-z); }
 
@@ -139,19 +175,123 @@ function renderIntervals() {
 
 function getAdvancedToggleLabel() {
   const lang = window.currentLang || 'zh';
+  const currentThemeId = localStorage.getItem(THEME_KEY) || THEMES[0].id;
+  const theme = THEMES.find(t => t.id === currentThemeId) || THEMES[0];
+  const themeName = (theme.labels && (theme.labels[lang] || theme.labels.zh)) || theme.id;
   const labels = {
     off: {
-      zh: '🧩 高级模式：关',
-      mix: '🧩 高级模式：关',
-      en: '🧩 Advanced: Off'
+      zh: `🧩 高级模式：关 | 主题：${themeName}（长按换色）`,
+      mix: `🧩 高级模式：关 | Theme: ${themeName}（长按换色）`,
+      en: `🧩 Advanced: Off | Theme: ${themeName} (Long Press)`
     },
     on: {
-      zh: '🧩 高级模式：开',
-      mix: '🧩 高级模式：开',
-      en: '🧩 Advanced: On'
+      zh: `🧩 高级模式：开 | 主题：${themeName}（长按换色）`,
+      mix: `🧩 高级模式：开 | Theme: ${themeName}（长按换色）`,
+      en: `🧩 Advanced: On | Theme: ${themeName} (Long Press)`
     }
   };
   return (isAdvancedMode ? labels.on : labels.off)[lang] || (isAdvancedMode ? labels.on.zh : labels.off.zh);
+}
+
+function applyThemeById(themeId) {
+  const theme = THEMES.find(t => t.id === themeId) || THEMES[0];
+  const root = document.documentElement;
+  root.style.setProperty('--bg', theme.vars.bg);
+  root.style.setProperty('--panel', theme.vars.panel);
+  root.style.setProperty('--panel-2', theme.vars.panel2);
+  root.style.setProperty('--text', theme.vars.text);
+  root.style.setProperty('--muted', theme.vars.muted);
+  root.style.setProperty('--border', theme.vars.border);
+  root.style.setProperty('--accent', theme.vars.accent);
+  root.style.setProperty('--danger', theme.vars.danger);
+  root.style.setProperty('--input-bg', theme.vars.input);
+  root.style.setProperty('--pre-bg', theme.vars.pre);
+  root.style.setProperty('--tab-bg', theme.vars.tab);
+  root.style.setProperty('--record-bg', theme.vars.record);
+  root.style.setProperty('--dialog-bg', theme.vars.dialog);
+  root.style.setProperty('--dialog-shadow', theme.vars.shadow);
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const fallback = THEMES[0].id;
+  const valid = THEMES.some(t => t.id === saved) ? saved : fallback;
+  localStorage.setItem(THEME_KEY, valid);
+  applyThemeById(valid);
+}
+
+function renderThemePickerOptions() {
+  const wrap = document.getElementById('theme-picker-options');
+  if (!wrap) return;
+  const lang = window.currentLang || 'zh';
+  const current = localStorage.getItem(THEME_KEY) || THEMES[0].id;
+  wrap.innerHTML = '';
+  THEMES.forEach(theme => {
+    const btn = document.createElement('button');
+    const name = (theme.labels && (theme.labels[lang] || theme.labels.zh)) || theme.id;
+    btn.textContent = theme.id === current ? `✓ ${name}` : name;
+    btn.style.margin = '0.25rem';
+    btn.onclick = () => selectThemeFromPicker(theme.id);
+    wrap.appendChild(btn);
+  });
+}
+
+function openThemePickerDialog() {
+  renderThemePickerOptions();
+  const dialog = document.getElementById('theme-picker-dialog');
+  if (!dialog) return;
+  dialog.style.display = 'block';
+}
+
+function closeThemePickerDialog() {
+  const dialog = document.getElementById('theme-picker-dialog');
+  if (!dialog) return;
+  dialog.style.display = 'none';
+}
+
+function selectThemeFromPicker(themeId) {
+  localStorage.setItem(THEME_KEY, themeId);
+  applyThemeById(themeId);
+  updateAdvancedModeUI();
+  closeThemePickerDialog();
+}
+
+function onAdvancedButtonPressStart(e) {
+  advancedLongPressTriggered = false;
+  if (advancedPressTimer) clearTimeout(advancedPressTimer);
+  advancedPressTimer = setTimeout(() => {
+    advancedLongPressTriggered = true;
+    openThemePickerDialog();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  }, 520);
+}
+
+function onAdvancedButtonPressEnd() {
+  if (advancedPressTimer) {
+    clearTimeout(advancedPressTimer);
+    advancedPressTimer = null;
+  }
+}
+
+function onAdvancedButtonClick(e) {
+  if (advancedLongPressTriggered) {
+    advancedLongPressTriggered = false;
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    return;
+  }
+  toggleAdvancedMode();
+}
+
+function bindAdvancedButtonEvents() {
+  const btn = document.getElementById('advanced-toggle');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('pointerdown', onAdvancedButtonPressStart);
+  btn.addEventListener('pointerup', onAdvancedButtonPressEnd);
+  btn.addEventListener('pointerleave', onAdvancedButtonPressEnd);
+  btn.addEventListener('pointercancel', onAdvancedButtonPressEnd);
+  btn.addEventListener('click', onAdvancedButtonClick);
 }
 
 function updateAdvancedModeUI() {
@@ -442,7 +582,7 @@ function setBackupReminderStatus(message, isError = false) {
   const el = document.getElementById('backup-reminder-status');
   if (!el) return;
   el.textContent = message;
-  el.style.color = isError ? '#b91c1c' : '#444';
+  el.style.color = isError ? '#b91c1c' : 'var(--muted)';
 }
 
 function applyBackupReminderConfigToUI(config) {
@@ -597,7 +737,7 @@ function setNutstoreStatus(message, isError = false) {
   const el = document.getElementById('nutstore-status');
   if (!el) return;
   el.textContent = message;
-  el.style.color = isError ? '#b91c1c' : '#444';
+  el.style.color = isError ? '#b91c1c' : 'var(--muted)';
 }
 
 function applyNutstoreConfigToUI(config) {
@@ -828,6 +968,8 @@ function importBackupFromCSV() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  bindAdvancedButtonEvents();
   showTab('tab-timer');
   updateAdvancedModeUI();
   listAllBackups(); // 页面加载后展示备份列表
@@ -1239,6 +1381,12 @@ function exportTomatoPotato() {
       --border: #2a2a2a;
       --accent: #7a7a7a;
       --danger: #d46a6a;
+      --input-bg: #141414;
+      --pre-bg: #101010;
+      --tab-bg: #0f0f0f;
+      --record-bg: #121212;
+      --dialog-bg: #0f0f0f;
+      --dialog-shadow: 0 8px 32px rgba(0,0,0,0.55);
     }
     body {
       background: var(--bg);
@@ -1252,7 +1400,7 @@ function exportTomatoPotato() {
       padding: 0.8rem;
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: #0f0f0f;
+      background: var(--tab-bg);
     }
     .tabs {
       display: flex;
@@ -1270,14 +1418,14 @@ function exportTomatoPotato() {
     }
     button:hover { border-color: var(--accent); }
     input, textarea, select {
-      background: #141414;
+      background: var(--input-bg);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0.35rem 0.45rem;
     }
     pre {
-      background: #101010;
+      background: var(--pre-bg);
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -1289,7 +1437,7 @@ function exportTomatoPotato() {
     }
     th, td { padding: 0.2rem; }
     .interval-record {
-      background: #121212;
+      background: var(--record-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 0.5rem;
@@ -1313,7 +1461,7 @@ function exportTomatoPotato() {
 </head>
 <body>
   <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
-  <button id="advanced-toggle" onclick="toggleAdvancedMode()">🧩 高级模式：关</button>
+  <button id="advanced-toggle">🧩 高级模式：关</button>
   <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="tabs">
     <button class="tab-button" onclick="showTab('tab-timer')" data-zh="计时器" data-mix="计时器" data-en="Timer">计时器</button>
@@ -1396,7 +1544,7 @@ function exportTomatoPotato() {
         <div data-zh="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
              data-mix="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
              data-en="Note: path must start with NewMars/ or Nutstore write will fail."
-             style="font-size:0.88rem; color:#666;">
+             style="font-size:0.88rem; color:var(--muted);">
           提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。
         </div>
         <label>
@@ -1408,7 +1556,7 @@ function exportTomatoPotato() {
           <button onclick="toggleNutstoreAutoBackup()" id="nutstore-toggle-btn" data-zh="▶️ 启用自动上传" data-mix="▶️ 启用自动上传" data-en="▶️ Start Auto Upload">▶️ 启用自动上传</button>
           <button onclick="uploadNutstoreBackupNow()" data-zh="📤 立即上传备份" data-mix="📤 立即上传备份" data-en="📤 Upload Backup Now">📤 立即上传备份</button>
         </div>
-        <div id="nutstore-status" style="font-size:0.9rem; color:#444;"></div>
+        <div id="nutstore-status" style="font-size:0.9rem; color:var(--muted);"></div>
       </div>
     </div>
     <hr>
@@ -1425,26 +1573,33 @@ function exportTomatoPotato() {
       <div data-zh="触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。"
            data-mix="触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。"
            data-en="A popup appears at schedule time; click \"Download Backup Now\" to download backup_*.csv without clearing records."
-           style="font-size:0.88rem; color:#666;">
+           style="font-size:0.88rem; color:var(--muted);">
         触发时会弹窗；点击“现在下载备份”会下载 backup_*.csv，不会清空记录。
       </div>
-      <div id="backup-reminder-status" style="font-size:0.9rem; color:#444;"></div>
+      <div id="backup-reminder-status" style="font-size:0.9rem; color:var(--muted);"></div>
     </div>
     
   </div>
 
-  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:#0f0f0f; border:1px solid #2a2a2a; position:fixed; top:30%; left:30%; z-index:9999; box-shadow:0 0 16px rgba(0,0,0,0.55);">
+  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); position:fixed; top:30%; left:30%; z-index:9999; box-shadow:var(--dialog-shadow);">
     <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
     <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
     <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-mix="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
   </div>
 
-  <div id="backup-reminder-dialog" style="display:none; padding:1em; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:0 8px 32px rgba(0,0,0,0.55);">
+  <div id="backup-reminder-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:var(--dialog-shadow);">
     <h3 data-zh="⚠️ 备份提醒" data-mix="⚠️ 备份提醒" data-en="⚠️ Backup Reminder">⚠️ 备份提醒</h3>
     <p id="backup-reminder-message" style="line-height:1.5;"></p>
     <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.8rem;">
       <button onclick="closeBackupReminderDialog()" data-zh="稍后再说" data-mix="稍后再说" data-en="Later">稍后再说</button>
       <button onclick="downloadBackupNowFromReminder()" data-zh="现在下载备份" data-mix="现在下载备份" data-en="Download Backup Now">现在下载备份</button>
+    </div>
+  </div>
+  <div id="theme-picker-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); border-radius:10px; position:fixed; top:24%; left:50%; transform:translateX(-50%); z-index:10001; width:min(92vw, 560px); box-shadow:var(--dialog-shadow);">
+    <h3 data-zh="🎨 选择主题" data-mix="🎨 选择主题" data-en="🎨 Choose Theme">🎨 选择主题</h3>
+    <div id="theme-picker-options" style="display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.55rem;"></div>
+    <div style="display:flex; justify-content:flex-end; margin-top:0.8rem;">
+      <button onclick="closeThemePickerDialog()" data-zh="关闭" data-mix="关闭" data-en="Close">关闭</button>
     </div>
   </div>
   <footer>
@@ -1497,6 +1652,9 @@ function exportTomatoPotato() {
     }
     if (typeof updateBackupReminderToggleButton === 'function') {
       updateBackupReminderToggleButton();
+    }
+    if (typeof renderThemePickerOptions === 'function') {
+      renderThemePickerOptions();
     }
   }
 
