@@ -45,3 +45,33 @@
 ### Notes
 - Mobile browser WebDAV/CORS behavior may vary by browser.
 - If upload fails on one browser, retry with another browser and verify app password.
+
+## 2026-03-02 (Later Iteration, by CodeX/Codex)
+
+### Implemented
+- Migrated UI maintenance to `stopwatch_combined.html` only.
+- Added scheduled backup reminder dialog:
+  - popup content includes elapsed time since last backup download
+  - warns about localStorage loss risk
+  - action button text: `现在下载备份`
+  - download file naming: `backup_YYYYMMDD_HHMMSS.csv`
+  - backup download does not clear intervals
+- Added `advanced mode` toggle under language button:
+  - default OFF
+  - when OFF: hide `Tag`, `指定时间（分钟）`, and Tomato Export tab button
+  - when ON: show those advanced controls
+- Moved `手动备份` and `恢复历史备份` from timer tab to log/backup tab.
+- Reordered tabs so Tomato Export appears to the right of Log & Backups.
+- Set default theme to black/gray dark mode (removed blue-tinted theme).
+- Hid Nutstore UI and initialization by default (`NUTSTORE_FEATURE_ENABLED = false`) because browser-side CORS blocks practical usage.
+
+### Automated Testing
+- Inline JS syntax check passed for all 5 `<script>` blocks.
+- Feature-presence and tab-scope checks passed:
+  - advanced mode toggle exists
+  - backup reminder dialog exists
+  - backup buttons only in log tab
+  - Nutstore feature flag set to hidden mode
+- Runtime simulation passed:
+  - reminder dialog opens
+  - hidden Nutstore section remains hidden on init

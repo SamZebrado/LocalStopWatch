@@ -16,6 +16,7 @@ const NUTSTORE_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
 const BACKUP_REMINDER_CFG_KEY = 'backup_download_reminder_cfg_v1';
 const ADVANCED_MODE_KEY = 'advanced_mode_enabled_v1';
+const NUTSTORE_FEATURE_ENABLED = false;
 let nutstoreAutoTimer = null;
 let backupReminderTimer = null;
 let isAdvancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === '1';
@@ -830,14 +831,19 @@ document.addEventListener('DOMContentLoaded', () => {
   showTab('tab-timer');
   updateAdvancedModeUI();
   listAllBackups(); // 页面加载后展示备份列表
-  const config = getNutstoreConfig();
-  applyNutstoreConfigToUI(config);
-  updateNutstoreToggleButton();
-  if (config.lastUploadAt) {
-    setNutstoreStatus(`上次上传：${new Date(config.lastUploadAt).toLocaleString()}`);
-  }
-  if (config.enabled) {
-    startNutstoreAutoBackup();
+  if (NUTSTORE_FEATURE_ENABLED) {
+    const config = getNutstoreConfig();
+    applyNutstoreConfigToUI(config);
+    updateNutstoreToggleButton();
+    if (config.lastUploadAt) {
+      setNutstoreStatus(`上次上传：${new Date(config.lastUploadAt).toLocaleString()}`);
+    }
+    if (config.enabled) {
+      startNutstoreAutoBackup();
+    }
+  } else {
+    const nutstoreSection = document.getElementById('nutstore-section');
+    if (nutstoreSection) nutstoreSection.style.display = 'none';
   }
 
   const reminderConfig = getBackupReminderConfig();
@@ -1225,17 +1231,17 @@ function exportTomatoPotato() {
 </script>
   <style>
     :root {
-      --bg: #0b1020;
-      --panel: #131a2e;
-      --panel-2: #1a233f;
-      --text: #e6ecff;
-      --muted: #9fb0d6;
-      --border: #2b355a;
-      --accent: #4da3ff;
-      --danger: #ff6b6b;
+      --bg: #000000;
+      --panel: #0a0a0a;
+      --panel-2: #131313;
+      --text: #e9e9e9;
+      --muted: #a3a3a3;
+      --border: #2a2a2a;
+      --accent: #7a7a7a;
+      --danger: #d46a6a;
     }
     body {
-      background: radial-gradient(1200px 700px at 20% -10%, #1f2d57 0%, var(--bg) 55%);
+      background: var(--bg);
       color: var(--text);
       margin: 1rem;
       font-family: "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
@@ -1246,8 +1252,7 @@ function exportTomatoPotato() {
       padding: 0.8rem;
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: rgba(19, 26, 46, 0.72);
-      backdrop-filter: blur(3px);
+      background: #0f0f0f;
     }
     .tabs {
       display: flex;
@@ -1265,14 +1270,14 @@ function exportTomatoPotato() {
     }
     button:hover { border-color: var(--accent); }
     input, textarea, select {
-      background: #0f1730;
+      background: #141414;
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0.35rem 0.45rem;
     }
     pre {
-      background: #0e1630;
+      background: #101010;
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -1284,7 +1289,7 @@ function exportTomatoPotato() {
     }
     th, td { padding: 0.2rem; }
     .interval-record {
-      background: rgba(26, 35, 63, 0.7);
+      background: #121212;
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 0.5rem;
@@ -1302,7 +1307,7 @@ function exportTomatoPotato() {
     }
     #advanced-toggle.is-on {
       border-color: var(--accent);
-      box-shadow: 0 0 0 1px rgba(77, 163, 255, 0.35);
+      box-shadow: 0 0 0 1px rgba(122, 122, 122, 0.35);
     }
   </style>
 </head>
@@ -1373,36 +1378,38 @@ function exportTomatoPotato() {
     <h3 data-zh="📂 可用备份列表" data-mix="📂 可用备份列表" data-en="📂 Available Backups">📂 可用备份列表</h3>
     <div id="backup-list"></div>
     <hr>
-    <h3 data-zh="☁️ 坚果云定时备份" data-mix="☁️ 坚果云定时备份" data-en="☁️ Nutstore Scheduled Backup">☁️ 坚果云定时备份</h3>
-    <div id="nutstore-config" style="display:grid; gap:0.5rem; max-width:640px;">
-      <label>
-        <span data-zh="账号邮箱" data-mix="账号邮箱" data-en="Account Email">账号邮箱</span>
-        <input id="nutstore-username" type="email" autocomplete="username" placeholder="name@example.com">
-      </label>
-      <label>
-        <span data-zh="应用密码" data-mix="应用密码" data-en="App Password">应用密码</span>
-        <input id="nutstore-password" type="password" autocomplete="current-password" placeholder="请使用坚果云应用密码">
-      </label>
-      <label>
-        <span data-zh="远程文件名" data-mix="远程文件名" data-en="Remote File Name">远程文件名</span>
-        <input id="nutstore-remote-file" type="text" placeholder="NewMars/LocalStopWatch_backup_latest.json">
-      </label>
-      <div data-zh="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
-           data-mix="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
-           data-en="Note: path must start with NewMars/ or Nutstore write will fail."
-           style="font-size:0.88rem; color:#666;">
-        提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。
+    <div id="nutstore-section">
+      <h3 data-zh="☁️ 坚果云定时备份" data-mix="☁️ 坚果云定时备份" data-en="☁️ Nutstore Scheduled Backup">☁️ 坚果云定时备份</h3>
+      <div id="nutstore-config" style="display:grid; gap:0.5rem; max-width:640px;">
+        <label>
+          <span data-zh="账号邮箱" data-mix="账号邮箱" data-en="Account Email">账号邮箱</span>
+          <input id="nutstore-username" type="email" autocomplete="username" placeholder="name@example.com">
+        </label>
+        <label>
+          <span data-zh="应用密码" data-mix="应用密码" data-en="App Password">应用密码</span>
+          <input id="nutstore-password" type="password" autocomplete="current-password" placeholder="请使用坚果云应用密码">
+        </label>
+        <label>
+          <span data-zh="远程文件名" data-mix="远程文件名" data-en="Remote File Name">远程文件名</span>
+          <input id="nutstore-remote-file" type="text" placeholder="NewMars/LocalStopWatch_backup_latest.json">
+        </label>
+        <div data-zh="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
+             data-mix="提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。"
+             data-en="Note: path must start with NewMars/ or Nutstore write will fail."
+             style="font-size:0.88rem; color:#666;">
+          提示：该路径必须以 NewMars/ 开头，否则坚果云不会写入。
+        </div>
+        <label>
+          <span data-zh="自动备份间隔（小时）" data-mix="自动备份间隔（小时）" data-en="Auto Backup Interval (hours)">自动备份间隔（小时）</span>
+          <input id="nutstore-interval-hours" type="number" min="1" step="1" value="1">
+        </label>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button onclick="saveNutstoreConfig()" data-zh="💾 保存连接配置" data-mix="💾 保存连接配置" data-en="💾 Save Config">💾 保存连接配置</button>
+          <button onclick="toggleNutstoreAutoBackup()" id="nutstore-toggle-btn" data-zh="▶️ 启用自动上传" data-mix="▶️ 启用自动上传" data-en="▶️ Start Auto Upload">▶️ 启用自动上传</button>
+          <button onclick="uploadNutstoreBackupNow()" data-zh="📤 立即上传备份" data-mix="📤 立即上传备份" data-en="📤 Upload Backup Now">📤 立即上传备份</button>
+        </div>
+        <div id="nutstore-status" style="font-size:0.9rem; color:#444;"></div>
       </div>
-      <label>
-        <span data-zh="自动备份间隔（小时）" data-mix="自动备份间隔（小时）" data-en="Auto Backup Interval (hours)">自动备份间隔（小时）</span>
-        <input id="nutstore-interval-hours" type="number" min="1" step="1" value="1">
-      </label>
-      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-        <button onclick="saveNutstoreConfig()" data-zh="💾 保存连接配置" data-mix="💾 保存连接配置" data-en="💾 Save Config">💾 保存连接配置</button>
-        <button onclick="toggleNutstoreAutoBackup()" id="nutstore-toggle-btn" data-zh="▶️ 启用自动上传" data-mix="▶️ 启用自动上传" data-en="▶️ Start Auto Upload">▶️ 启用自动上传</button>
-        <button onclick="uploadNutstoreBackupNow()" data-zh="📤 立即上传备份" data-mix="📤 立即上传备份" data-en="📤 Upload Backup Now">📤 立即上传备份</button>
-      </div>
-      <div id="nutstore-status" style="font-size:0.9rem; color:#444;"></div>
     </div>
     <hr>
     <h3 data-zh="⏰ 定时提醒下载备份" data-mix="⏰ 定时提醒下载备份" data-en="⏰ Scheduled Backup Reminder">⏰ 定时提醒下载备份</h3>
@@ -1426,13 +1433,13 @@ function exportTomatoPotato() {
     
   </div>
 
-  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:#fff; border:1px solid #ccc; position:fixed; top:30%; left:30%; z-index:9999; box-shadow:0 0 10px rgba(0,0,0,0.2);">
+  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:#0f0f0f; border:1px solid #2a2a2a; position:fixed; top:30%; left:30%; z-index:9999; box-shadow:0 0 16px rgba(0,0,0,0.55);">
     <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
     <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
     <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-mix="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
   </div>
 
-  <div id="backup-reminder-dialog" style="display:none; padding:1em; background:#0f1730; border:1px solid #2b355a; border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+  <div id="backup-reminder-dialog" style="display:none; padding:1em; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:0 8px 32px rgba(0,0,0,0.55);">
     <h3 data-zh="⚠️ 备份提醒" data-mix="⚠️ 备份提醒" data-en="⚠️ Backup Reminder">⚠️ 备份提醒</h3>
     <p id="backup-reminder-message" style="line-height:1.5;"></p>
     <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:0.8rem;">

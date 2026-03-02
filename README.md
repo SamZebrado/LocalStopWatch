@@ -171,6 +171,23 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 - Legacy split JS files (`timer.js`, `ruleTable.js`, `memoParser.js`, `exportTomato.js`) are removed from git tracking;
 - `stopwatch.html` is kept as a redirect entry to preserve old links.
 
+### 🤖 Codex 更新记录（Codex Update Notes）- 2026-03-02
+
+> 本次功能迭代明确使用了 **CodeX / Codex** 进行实现与测试。
+> This round of implementation and testing was done with **CodeX / Codex**.
+
+- 新增“定时提醒下载备份”弹窗：
+  - 弹窗会显示“距上次备份已 XX 时间未备份”；
+  - 提醒浏览器更新/清理 localStorage 会导致未备份数据丢失；
+  - 点击“现在下载备份”将下载 `backup_*.csv`，且不会清空记录。
+- 新增“高级模式”按钮（语言按钮下方）：
+  - 默认关闭；
+  - 仅在开启时显示 `Tag` 与“指定时间（分钟）”输入框；
+  - 仅在开启时显示“番茄土豆格式导出”页签（已移动到“运行日志和备份”右侧）。
+- “手动备份”和“恢复历史备份”按钮已从计时器页迁移到“运行日志和备份”页，避免误触。
+- 外观改为默认深色（黑灰系），移除蓝色主色以降低夜间刺激。
+- 因浏览器 CORS 限制，坚果云功能暂时默认隐藏（代码保留，后续可恢复）。
+
 ---
 
 Made with ❤️ by Captain Sam & ChatGPT
