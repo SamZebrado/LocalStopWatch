@@ -106,3 +106,14 @@
   - size controls persist in localStorage
   - advanced panel visibility works
   - theme picker still works
+
+### Follow-up UI Extensions
+- Added advanced controls for:
+  - input font size (`1-50`, persistent)
+  - button heights by two groups (persistent):
+    - main group: timer-tab button + remember button
+    - secondary group: all other buttons
+- Added safer number-input behavior:
+  - users can clear then type new values
+  - empty blur restores previous valid value
+- Added button text auto-fit cap by button area to reduce overflow when button font is set large.

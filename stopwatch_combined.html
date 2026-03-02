@@ -21,6 +21,9 @@ const THEME_KEY = 'ui_theme_id_v1';
 const UI_FONT_SIZE_KEY = 'ui_font_size_px_v1';
 const UI_BUTTON_SIZE_KEY = 'ui_button_size_px_v1';
 const UI_TITLE_SIZE_KEY = 'ui_title_size_px_v1';
+const UI_INPUT_FONT_SIZE_KEY = 'ui_input_font_size_px_v1';
+const UI_MAIN_BTN_HEIGHT_KEY = 'ui_main_btn_height_px_v1';
+const UI_OTHER_BTN_HEIGHT_KEY = 'ui_other_btn_height_px_v1';
 const NUTSTORE_FEATURE_ENABLED = false;
 let nutstoreAutoTimer = null;
 let backupReminderTimer = null;
@@ -28,6 +31,9 @@ let isAdvancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === '1';
 let uiFontSize = Number(localStorage.getItem(UI_FONT_SIZE_KEY)) || 18;
 let uiButtonSize = Number(localStorage.getItem(UI_BUTTON_SIZE_KEY)) || 16;
 let uiTitleSize = Number(localStorage.getItem(UI_TITLE_SIZE_KEY)) || 32;
+let uiInputFontSize = Number(localStorage.getItem(UI_INPUT_FONT_SIZE_KEY)) || 18;
+let uiMainBtnHeight = Number(localStorage.getItem(UI_MAIN_BTN_HEIGHT_KEY)) || 58;
+let uiOtherBtnHeight = Number(localStorage.getItem(UI_OTHER_BTN_HEIGHT_KEY)) || 50;
 let advancedPressTimer = null;
 let advancedLongPressTriggered = false;
 
@@ -310,12 +316,25 @@ function bindAdvancedButtonEvents() {
   btn.addEventListener('click', onAdvancedButtonClick);
 }
 
-function clampUiSize(v) {
-  return Math.max(1, Math.min(50, Number(v) || 1));
+function getUiRange(kind) {
+  const ranges = {
+    font: [1, 50],
+    button: [1, 50],
+    title: [1, 50],
+    inputFont: [1, 50],
+    mainBtnHeight: [20, 140],
+    otherBtnHeight: [20, 140]
+  };
+  return ranges[kind] || [1, 50];
+}
+
+function clampUiSizeByKind(kind, v) {
+  const [minV, maxV] = getUiRange(kind);
+  return Math.max(minV, Math.min(maxV, Number(v) || minV));
 }
 
 function applyUIFontSize(sizePx) {
-  const v = clampUiSize(sizePx);
+  const v = clampUiSizeByKind('font', sizePx);
   uiFontSize = v;
   localStorage.setItem(UI_FONT_SIZE_KEY, String(v));
   document.documentElement.style.setProperty('--ui-font-size', `${v}px`);
@@ -324,7 +343,7 @@ function applyUIFontSize(sizePx) {
 }
 
 function applyUIButtonSize(sizePx) {
-  const v = clampUiSize(sizePx);
+  const v = clampUiSizeByKind('button', sizePx);
   uiButtonSize = v;
   localStorage.setItem(UI_BUTTON_SIZE_KEY, String(v));
   document.documentElement.style.setProperty('--ui-button-font-size', `${v}px`);
@@ -338,7 +357,7 @@ function applyUIButtonSize(sizePx) {
 }
 
 function applyUITitleSize(sizePx) {
-  const v = clampUiSize(sizePx);
+  const v = clampUiSizeByKind('title', sizePx);
   uiTitleSize = v;
   localStorage.setItem(UI_TITLE_SIZE_KEY, String(v));
   document.documentElement.style.setProperty('--ui-h1-size', `${v}px`);
@@ -348,14 +367,47 @@ function applyUITitleSize(sizePx) {
   if (input) input.dataset.lastValid = String(v);
 }
 
+function applyUIInputFontSize(sizePx) {
+  const v = clampUiSizeByKind('inputFont', sizePx);
+  uiInputFontSize = v;
+  localStorage.setItem(UI_INPUT_FONT_SIZE_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-input-font-size', `${v}px`);
+  const input = document.getElementById('input-font-size-input');
+  if (input) input.dataset.lastValid = String(v);
+}
+
+function applyUIMainBtnHeight(sizePx) {
+  const v = clampUiSizeByKind('mainBtnHeight', sizePx);
+  uiMainBtnHeight = v;
+  localStorage.setItem(UI_MAIN_BTN_HEIGHT_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-main-btn-height', `${v}px`);
+  const input = document.getElementById('main-btn-height-input');
+  if (input) input.dataset.lastValid = String(v);
+  autoFitButtonText();
+}
+
+function applyUIOtherBtnHeight(sizePx) {
+  const v = clampUiSizeByKind('otherBtnHeight', sizePx);
+  uiOtherBtnHeight = v;
+  localStorage.setItem(UI_OTHER_BTN_HEIGHT_KEY, String(v));
+  document.documentElement.style.setProperty('--ui-other-btn-height', `${v}px`);
+  const input = document.getElementById('other-btn-height-input');
+  if (input) input.dataset.lastValid = String(v);
+  autoFitButtonText();
+}
+
 function onUiSizeInput(kind, value) {
   if (value === '') return;
   const n = Number(value);
   if (!Number.isFinite(n)) return;
-  if (n < 1 || n > 50) return;
+  const [minV, maxV] = getUiRange(kind);
+  if (n < minV || n > maxV) return;
   if (kind === 'font') applyUIFontSize(n);
   if (kind === 'button') applyUIButtonSize(n);
   if (kind === 'title') applyUITitleSize(n);
+  if (kind === 'inputFont') applyUIInputFontSize(n);
+  if (kind === 'mainBtnHeight') applyUIMainBtnHeight(n);
+  if (kind === 'otherBtnHeight') applyUIOtherBtnHeight(n);
 }
 
 function onUiSizeBlur(kind, inputId) {
@@ -363,21 +415,28 @@ function onUiSizeBlur(kind, inputId) {
   if (!input) return;
   const fallback = Number(input.dataset.lastValid || input.defaultValue || 18);
   const raw = input.value.trim();
-  if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < 1 || Number(raw) > 50) {
+  const [minV, maxV] = getUiRange(kind);
+  if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < minV || Number(raw) > maxV) {
     input.value = String(fallback);
     return;
   }
   onUiSizeInput(kind, raw);
-  input.value = String(clampUiSize(raw));
+  input.value = String(clampUiSizeByKind(kind, raw));
 }
 
 function syncUiSizeInputs() {
   const f = document.getElementById('font-size-input');
   const b = document.getElementById('button-size-input');
   const t = document.getElementById('title-size-input');
+  const i = document.getElementById('input-font-size-input');
+  const mh = document.getElementById('main-btn-height-input');
+  const oh = document.getElementById('other-btn-height-input');
   if (f) { f.value = String(uiFontSize); f.dataset.lastValid = String(uiFontSize); }
   if (b) { b.value = String(uiButtonSize); b.dataset.lastValid = String(uiButtonSize); }
   if (t) { t.value = String(uiTitleSize); t.dataset.lastValid = String(uiTitleSize); }
+  if (i) { i.value = String(uiInputFontSize); i.dataset.lastValid = String(uiInputFontSize); }
+  if (mh) { mh.value = String(uiMainBtnHeight); mh.dataset.lastValid = String(uiMainBtnHeight); }
+  if (oh) { oh.value = String(uiOtherBtnHeight); oh.dataset.lastValid = String(uiOtherBtnHeight); }
 }
 
 function autoFitButtonText() {
@@ -1073,8 +1132,12 @@ document.addEventListener('DOMContentLoaded', () => {
   applyUIFontSize(uiFontSize);
   applyUIButtonSize(uiButtonSize);
   applyUITitleSize(uiTitleSize);
+  applyUIInputFontSize(uiInputFontSize);
+  applyUIMainBtnHeight(uiMainBtnHeight);
+  applyUIOtherBtnHeight(uiOtherBtnHeight);
   syncUiSizeInputs();
   bindAdvancedButtonEvents();
+  window.addEventListener('resize', autoFitButtonText);
   showTab('tab-timer');
   updateAdvancedModeUI();
   listAllBackups(); // 页面加载后展示备份列表
@@ -1499,6 +1562,9 @@ function exportTomatoPotato() {
       --ui-h1-size: 32px;
       --ui-h2-size: 21px;
       --ui-h3-size: 18px;
+      --ui-input-font-size: 18px;
+      --ui-main-btn-height: 58px;
+      --ui-other-btn-height: 50px;
     }
     body {
       background: var(--bg);
@@ -1540,6 +1606,7 @@ function exportTomatoPotato() {
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 0.35rem 0.45rem;
+      font-size: var(--ui-input-font-size);
     }
     pre {
       background: var(--pre-bg);
@@ -1568,7 +1635,7 @@ function exportTomatoPotato() {
     }
     .top-actions button,
     .tab-button {
-      min-height: 50px;
+      min-height: var(--ui-other-btn-height);
       font-weight: 600;
     }
     #advanced-toggle.is-on {
@@ -1593,7 +1660,7 @@ function exportTomatoPotato() {
     }
     .control-row-primary button {
       flex: 1 1 100%;
-      min-height: 62px;
+      min-height: var(--ui-main-btn-height);
       font-weight: 700;
       border-width: 2px;
     }
@@ -1603,7 +1670,7 @@ function exportTomatoPotato() {
     }
     .tab-button { width: 100%; }
     #tab-btn-timer, #tab-export-btn { grid-column: 1 / -1; }
-    #tab-btn-timer { min-height: 58px; font-weight: 700; border-width: 2px; }
+    #tab-btn-timer { min-height: var(--ui-main-btn-height); font-weight: 700; border-width: 2px; }
     @media (max-width: 780px) {
       body { margin: 0.7rem; }
       .top-actions { justify-content: stretch; }
@@ -1628,8 +1695,14 @@ function exportTomatoPotato() {
     <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
       <label data-zh="文字字号(非标题)" data-mix="文字字号(非标题)" data-en="Text Size" for="font-size-input">文字字号(非标题)</label>
       <input id="font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('font', this.value)" onblur="onUiSizeBlur('font','font-size-input')" style="width:5.2rem;">
+      <label data-zh="输入框字体" data-mix="输入框字体" data-en="Input Font" for="input-font-size-input">输入框字体</label>
+      <input id="input-font-size-input" type="number" min="1" max="50" step="1" value="18" oninput="onUiSizeInput('inputFont', this.value)" onblur="onUiSizeBlur('inputFont','input-font-size-input')" style="width:5.2rem;">
       <label data-zh="按钮字号" data-mix="按钮字号" data-en="Button Size" for="button-size-input">按钮字号</label>
       <input id="button-size-input" type="number" min="1" max="50" step="1" value="16" oninput="onUiSizeInput('button', this.value)" onblur="onUiSizeBlur('button','button-size-input')" style="width:5.2rem;">
+      <label data-zh="主按钮高度(计时器+记下)" data-mix="主按钮高度(计时器+记下)" data-en="Main Btn Height" for="main-btn-height-input">主按钮高度(计时器+记下)</label>
+      <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')" style="width:5.6rem;">
+      <label data-zh="其他按钮高度" data-mix="其他按钮高度" data-en="Other Btn Height" for="other-btn-height-input">其他按钮高度</label>
+      <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')" style="width:5.6rem;">
       <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
       <input id="title-size-input" type="number" min="1" max="50" step="1" value="32" oninput="onUiSizeInput('title', this.value)" onblur="onUiSizeBlur('title','title-size-input')" style="width:5.2rem;">
     </div>
