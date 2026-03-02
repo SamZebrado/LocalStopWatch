@@ -1597,6 +1597,7 @@ function exportTomatoPotato() {
       border-radius: 8px;
       font-size: var(--ui-button-font-size);
       padding: var(--ui-button-pad-y) var(--ui-button-pad-x);
+      min-height: var(--ui-other-btn-height);
       cursor: pointer;
     }
     button:hover { border-color: var(--accent); }
@@ -1634,10 +1635,7 @@ function exportTomatoPotato() {
       justify-content: flex-start;
     }
     .top-actions button,
-    .tab-button {
-      min-height: var(--ui-other-btn-height);
-      font-weight: 600;
-    }
+    .tab-button { font-weight: 600; }
     #advanced-toggle.is-on {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(122, 122, 122, 0.35);
