@@ -347,10 +347,10 @@ function applyUIButtonSize(sizePx) {
   uiButtonSize = v;
   localStorage.setItem(UI_BUTTON_SIZE_KEY, String(v));
   document.documentElement.style.setProperty('--ui-button-font-size', `${v}px`);
-  const py = Math.max(0.2, v * 0.22).toFixed(2);
-  const px = Math.max(0.4, v * 0.45).toFixed(2);
-  document.documentElement.style.setProperty('--ui-button-pad-y', `${py}rem`);
-  document.documentElement.style.setProperty('--ui-button-pad-x', `${px}rem`);
+  const py = Math.max(4, Math.round(v * 0.32));
+  const px = Math.max(8, Math.round(v * 0.58));
+  document.documentElement.style.setProperty('--ui-button-pad-y', `${py}px`);
+  document.documentElement.style.setProperty('--ui-button-pad-x', `${px}px`);
   const input = document.getElementById('button-size-input');
   if (input) input.dataset.lastValid = String(v);
   autoFitButtonText();
@@ -1597,7 +1597,10 @@ function exportTomatoPotato() {
       border-radius: 8px;
       font-size: var(--ui-button-font-size);
       padding: var(--ui-button-pad-y) var(--ui-button-pad-x);
+      box-sizing: border-box;
+      line-height: 1.15;
       min-height: var(--ui-other-btn-height);
+      height: var(--ui-other-btn-height);
       cursor: pointer;
     }
     button:hover { border-color: var(--accent); }
@@ -1672,6 +1675,7 @@ function exportTomatoPotato() {
     .control-row-primary button {
       flex: 1 1 100%;
       min-height: var(--ui-main-btn-height);
+      height: var(--ui-main-btn-height);
       font-weight: 700;
       border-width: 2px;
     }
@@ -1681,7 +1685,12 @@ function exportTomatoPotato() {
     }
     .tab-button { width: 100%; }
     #tab-btn-timer, #tab-export-btn { grid-column: 1 / -1; }
-    #tab-btn-timer { min-height: var(--ui-main-btn-height); font-weight: 700; border-width: 2px; }
+    #tab-btn-timer {
+      min-height: var(--ui-main-btn-height);
+      height: var(--ui-main-btn-height);
+      font-weight: 700;
+      border-width: 2px;
+    }
     @media (max-width: 780px) {
       body { margin: 0.7rem; }
       .top-actions { justify-content: stretch; }
@@ -1726,11 +1735,11 @@ function exportTomatoPotato() {
     </div>
     <div class="size-row">
       <label data-zh="主按钮高度(计时器+记下)" data-mix="主按钮高度(计时器+记下)" data-en="Main Btn Height" for="main-btn-height-input">主按钮高度(计时器+记下)</label>
-      <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')">
+      <input id="main-btn-height-input" type="number" min="20" max="140" step="1" value="58" oninput="onUiSizeInput('mainBtnHeight', this.value)" onchange="onUiSizeInput('mainBtnHeight', this.value)" onblur="onUiSizeBlur('mainBtnHeight','main-btn-height-input')">
     </div>
     <div class="size-row">
       <label data-zh="其他按钮高度" data-mix="其他按钮高度" data-en="Other Btn Height" for="other-btn-height-input">其他按钮高度</label>
-      <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')">
+      <input id="other-btn-height-input" type="number" min="20" max="140" step="1" value="50" oninput="onUiSizeInput('otherBtnHeight', this.value)" onchange="onUiSizeInput('otherBtnHeight', this.value)" onblur="onUiSizeBlur('otherBtnHeight','other-btn-height-input')">
     </div>
     <div class="size-row">
       <label data-zh="标题字号" data-mix="标题字号" data-en="Title Size" for="title-size-input">标题字号</label>
