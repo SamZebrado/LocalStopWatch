@@ -1,0 +1,12 @@
+{
+  "name": "local-stopwatch",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/local-stopwatch-test.js",
+    "install:playwright": "npx playwright install"
+  },
+  "devDependencies": {
+    "playwright": "file:../minimal-paper-pipeline/node_modules/playwright"
+  }
+}

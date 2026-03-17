@@ -180,15 +180,22 @@ function renderIntervals() {
       <div>Tag: <input value="${item.tag || ''}" oninput="updateTag(${trueIndex}, this.value)"></div>
       <div>指定时间（分钟）: <input type="number" value="${item.setDuration || ''}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
     ` : '';
+    // 精简模式下显示解析后的标签和时间
+    const simpleModeTag = !isAdvancedMode && item.parsed && item.tag ? `
+      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em; margin-right: 1em;">${item.tag}</span>
+    ` : '';
+    const simpleModeDuration = !isAdvancedMode && item.parsed && item.setDuration ? `
+      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em;">${item.setDuration}分钟</span>
+    ` : '';
     div.innerHTML = `
       <div><strong class="duration">${mins} 分钟</strong></div>
-      <div>Memo: <input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)"></div>
+      <div>Memo: ${simpleModeTag}<input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)">${simpleModeDuration}</div>
       ${advancedFields}
       <div>结束时间: ${endTimeStr}</div>
       <button onclick="parseMemo(${trueIndex})">解析Memo</button>
       <button onclick="undoParse(${trueIndex})">撤销</button>
     `;
-    if (item.parsed) div.style.background = '#eee';
+    if (isAdvancedMode && item.parsed) div.style.background = '#eee';
     container.appendChild(div);
   });
 }
@@ -439,8 +446,7 @@ function updateAdvancedModeUI() {
       showTab('tab-log');
     }
   }
-  const sizeCtl = document.getElementById('font-size-control');
-  if (sizeCtl) sizeCtl.style.display = isAdvancedMode ? '' : 'none';
+  // 字体配置不再随高级模式自动显示，而是通过长按按钮控制
   syncUiSizeInputs();
   autoFitButtonText();
   renderIntervals();
@@ -1135,6 +1141,45 @@ document.addEventListener('DOMContentLoaded', () => {
   if (reminderConfig.enabled) {
     startBackupReminder();
   }
+
+  // 高级模式按钮长按功能
+  const advancedToggle = document.getElementById('advanced-toggle');
+  let longPressTimer;
+  
+  advancedToggle.addEventListener('mousedown', () => {
+    longPressTimer = setTimeout(() => {
+      // 长按：显示/隐藏字体配置
+      const fontSizeControl = document.getElementById('font-size-control');
+      if (fontSizeControl) {
+        fontSizeControl.style.display = fontSizeControl.style.display === 'none' ? '' : 'none';
+      }
+    }, 500);
+  });
+  
+  advancedToggle.addEventListener('mouseup', () => {
+    clearTimeout(longPressTimer);
+  });
+  
+  advancedToggle.addEventListener('mouseleave', () => {
+    clearTimeout(longPressTimer);
+  });
+  
+  advancedToggle.addEventListener('click', toggleAdvancedMode);
+  
+  // 移动端触摸事件
+  advancedToggle.addEventListener('touchstart', () => {
+    longPressTimer = setTimeout(() => {
+      // 长按：显示/隐藏字体配置
+      const fontSizeControl = document.getElementById('font-size-control');
+      if (fontSizeControl) {
+        fontSizeControl.style.display = fontSizeControl.style.display === 'none' ? '' : 'none';
+      }
+    }, 500);
+  });
+  
+  advancedToggle.addEventListener('touchend', () => {
+    clearTimeout(longPressTimer);
+  });
 });
 
 function restoreLatestBackup() {
@@ -1352,7 +1397,6 @@ function getI18n(key) {
 }
 
 function parseMemo(index) {
-  const intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
   const rules = JSON.parse(localStorage.getItem('ruleTable') || '[]');
   let item = intervals[index];
 
@@ -1423,11 +1467,10 @@ function parseMemo(index) {
 
   intervals[index] = item;
   localStorage.setItem('intervals', JSON.stringify(intervals));
-  location.reload();
+  renderIntervals();
 }
 
 function undoParse(index) {
-  const intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
   const item = intervals[index];
   if (!item || !item.parsed) {
     alert(getI18n('undoFailed'));
@@ -1441,7 +1484,7 @@ function undoParse(index) {
 
   intervals[index] = item;
   localStorage.setItem('intervals', JSON.stringify(intervals));
-  location.reload();
+  renderIntervals();
 }
 
 </script>
@@ -1684,7 +1727,7 @@ function exportTomatoPotato() {
   <h1 data-zh="⏱️ 本地网页秒表" data-mix="⏱️ 本地网页秒表" data-en="⏱️ Local Stopwatch">⏱️ 本地网页秒表</h1>
   <div class="top-actions">
     <button id="lang-toggle" onclick="toggleLang()">🌐 English</button>
-    <button id="advanced-toggle" onclick="toggleAdvancedMode()">🧩 高级模式：关</button>
+    <button id="advanced-toggle">🧩 高级模式：关</button>
     <button id="theme-toggle" onclick="openThemePickerDialog()" data-zh="🎨 颜色主题" data-mix="🎨 颜色主题" data-en="🎨 Theme">🎨 颜色主题</button>
   </div>
   <div id="font-size-control" style="display:none; margin-top:0.55rem; border:1px solid var(--border); border-radius:10px; padding:0.6rem;">

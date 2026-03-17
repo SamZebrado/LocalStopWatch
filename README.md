@@ -209,8 +209,29 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
     - 次组：其他按钮
 - 页头与导航布局优化：
   - 语言按钮/高级模式按钮位于主标题下方；
-  - “计时器”页签单独一行，“定义备注解析规则”与“运行日志和备份”同一行。
+  - "计时器"页签单独一行，"定义备注解析规则"与"运行日志和备份"同一行。
+
+### 🤖 最新更新记录（Latest Update Notes）- 2026-03-18
+
+> 本次功能迭代使用了 **ChatGPT、CodeX 与 TRAE CN** 进行实现与测试。
+> This round of implementation and testing was done with **ChatGPT, CodeX & TRAE CN**.
+
+- 优化高级模式按钮交互：
+  - 长按高级模式按钮显示/隐藏字体配置面板；
+  - 单击仅切换高级/精简模式，不再自动显示字体配置。
+- 改进精简模式体验：
+  - 解析Memo后以灰色小字显示标签，与"Memo："在同一行；
+  - 在Memo输入框右侧显示解析的时间；
+  - 优化标签和时间的显示间距，使布局更加美观；
+  - 解析后记录不再变白，保持界面一致性。
+- 优化解析Memo功能：
+  - 移除页面刷新，改为直接更新页面元素；
+  - 修复解析Memo后tag输入框和指定时间输入框不更新的问题；
+  - 确保实时显示解析结果，提升用户体验。
+- 添加开发文档：
+  - 创建 `dev_status.md` 文件，包含项目状态、开发计划和更新日志；
+  - 记录功能实现和优化过程。
 
 ---
 
-Made with ❤️ by Captain Sam & ChatGPT
+Made with ❤️ by Captain Sam, ChatGPT, CodeX & TRAE CN
