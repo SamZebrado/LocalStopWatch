@@ -107,7 +107,11 @@ function buildIntervalsCsv(includeWithdrawn = false) {
     ]);
   });
 
-  return rows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+  return rows.map(row => row.map(csvEscape).join(',')).join('\n');
+}
+
+function csvEscape(val) {
+  return `"${String(val ?? '').replace(/"/g, '""')}"`;
 }
 
 function downloadCsvContent(csv, filename) {
@@ -130,12 +134,14 @@ function buildBackupCsvFilename(now) {
 }
 
 function exportIntervalsToCSV() {
-  if (!intervals.length) {
-    alert(getI18n('noRecords'));
-    return;
+  const activeRecords = intervals.filter(item => !item.withdrawn);
+  if (!activeRecords.length) {
+    alert('没有未撤回的记录可导出');
+    return false;
   }
   const csv = buildIntervalsCsv(false); // 普通导出排除撤回记录
   downloadCsvContent(csv, buildNormalCsvFilename(new Date()));
+  return true;
 }
 
 function exportBackupCSVNoClear() {
@@ -1194,18 +1200,44 @@ function importBackupFromCSV() {
   reader.onload = function (e) {
     const text = e.target.result;
     const lines = text.trim().split('\n');
+    if (lines.length < 2) {
+      alert('CSV文件无效或为空');
+      return;
+    }
     const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
     const idx = name => header.indexOf(name);
+    const idxOr = (...names) => names.reduce((acc, n) => acc >= 0 ? acc : idx(n), -1);
+    
+    const durationIdx = idxOr('Duration', '持续时间（分钟）');
+    const memoIdx = idxOr('Memo', '备注');
+    const tagIdx = idxOr('Tag', '标签');
+    const endTimeIdx = idxOr('EndTime', '结束时间');
+    const statusIdx = idx('状态');
+    
+    if (durationIdx < 0 || memoIdx < 0) {
+      alert('CSV格式不兼容：缺少必要字段');
+      return;
+    }
+    
     const result = [];
     for (let i = 1; i < lines.length; i++) {
-      const cells = lines[i].split(',').map(s => s.replace(/^"|"$/g, ''));
+      if (!lines[i].trim()) continue;
+      const cells = lines[i].split(',').map(s => {
+        const unquoted = s.replace(/^"|"$/g, '');
+        return unquoted;
+      });
+      const withdrawn = statusIdx >= 0 && cells[statusIdx] === '已撤回';
       result.push({
-        duration: parseFloat(cells[idx('Duration')]) * 60000,
-        memo: cells[idx('Memo')] || '',
-        tag: cells[idx('Tag')] || '',
-        setDuration: cells[idx('SetDuration')] || '',
-        endTime: cells[idx('EndTime')] || new Date().toISOString(),
-        parsed: true
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        duration: cells[idxOr('格式化时间')] || '',
+        durationMs: durationIdx >= 0 ? (parseFloat(cells[durationIdx]) * 60000 || 0) : 0,
+        memo: memoIdx >= 0 ? cells[memoIdx] || '' : '',
+        tag: tagIdx >= 0 ? cells[tagIdx] || '' : '',
+        setDuration: '',
+        endTime: endTimeIdx >= 0 ? (Date.parse(cells[endTimeIdx]) || Date.now()) : Date.now(),
+        parsed: true,
+        withdrawn,
+        withdrawnAt: withdrawn ? Date.now() : null
       });
     }
     localStorage.setItem('intervals', JSON.stringify(result));
@@ -2074,10 +2106,16 @@ function exportTomatoPotato() {
       document.getElementById('confirm-clear-dialog').style.display = 'block';
     }
     function exportThenClear() {
-      exportIntervalsToCSV();
+      const exported = exportIntervalsToCSV();
+      if (!exported) return;
       intervals = [];
+      undoStack = [];
+      redoStack = [];
       localStorage.setItem('intervals', JSON.stringify(intervals));
-      document.getElementById('intervals-container').innerHTML = '';
+      localStorage.setItem('undoStack', JSON.stringify(undoStack));
+      localStorage.setItem('redoStack', JSON.stringify(redoStack));
+      renderIntervals();
+      updateUndoRedoButtons();
       document.getElementById('confirm-clear-dialog').style.display = 'none';
     }
   // 初始化语言状态（优先从 localStorage 读取）
