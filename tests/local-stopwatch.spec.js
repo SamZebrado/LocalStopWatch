@@ -1,10 +1,12 @@
 // @ts-check
+const path = require('path');
+const { pathToFileURL } = require('url');
 const { test, expect } = require('@playwright/test');
 
 test.describe('Local Stopwatch Tests', () => {
   test.beforeEach(async ({ page }) => {
     // 导航到本地文件
-    await page.goto('file:///Users/samzebrado/Library/CloudStorage/GoogleDrive-sz68@nyu.edu/My Drive/Personal/PersonalCoding/LocalStopWatch/stopwatch_combined.html');
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
   });
 
   test('测试长按高级模式按钮显示字体配置', async ({ page }) => {

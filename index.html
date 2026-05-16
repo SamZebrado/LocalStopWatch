@@ -89,20 +89,37 @@ function formatDateWithTimezone(date) {
 
 function buildIntervalsCsv(includeWithdrawn = false) {
   const rows = [
-    ['持续时间（分钟）', '格式化时间', '备注', '标签', '结束时间', '状态']
+    [
+      '持续时间（分钟）',
+      '持续时间毫秒',
+      '格式化时间',
+      '备注',
+      '标签',
+      '结束时间',
+      '结束时间戳',
+      '指定持续时间（分钟）',
+      '已解析',
+      '状态'
+    ]
   ];
 
   intervals.forEach(item => {
     if (!includeWithdrawn && item.withdrawn) return; // 排除撤回记录
-    const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '';
-    const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
+    const durationMs = Number(item.durationMs) || 0;
+    const mins = durationMs ? (durationMs / 60000).toFixed(2) : '';
+    const endTimeMs = Number(item.endTime) || '';
+    const endTimeStr = endTimeMs ? formatDateWithTimezone(new Date(endTimeMs)) : '';
     const status = item.withdrawn ? '已撤回' : '';
     rows.push([
       mins,
-      item.duration || '',
+      durationMs,
+      item.duration || (durationMs ? formatTime(durationMs) : ''),
       item.memo || '',
       item.tag || '',
       endTimeStr,
+      endTimeMs,
+      item.setDuration ?? '',
+      item.parsed ? '已解析' : '',
       status
     ]);
   });
@@ -1192,55 +1209,200 @@ function triggerManualBackup() {
 }
 
 // === 3. 导入CSV为interval数据 ===
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let charIdx = 0; charIdx < text.length; charIdx++) {
+    const ch = text[charIdx];
+    const next = text[charIdx + 1];
+
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        charIdx++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\r') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      if (next === '\n') charIdx++;
+    } else if (ch === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+
+  if (inQuotes) {
+    throw new Error('CSV quoted field was not closed');
+  }
+
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows.filter(r => r.some(cell => String(cell).trim() !== ''));
+}
+
+function normalizeCsvHeader(value) {
+  return String(value ?? '').replace(/^\uFEFF/, '').trim();
+}
+
+function parseDurationTextToMs(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+  const match = text.match(/^(\d+):(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?$/);
+  if (!match) return 0;
+  const hours = Number(match[1]) || 0;
+  const minutes = Number(match[2]) || 0;
+  const seconds = Number(match[3]) || 0;
+  const ms = Number(String(match[4] || '').padEnd(3, '0')) || 0;
+  return (((hours * 60 + minutes) * 60 + seconds) * 1000) + ms;
+}
+
+function parseCsvEndTimeToMs(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+
+  const direct = Date.parse(text);
+  if (Number.isFinite(direct)) return direct;
+
+  const msSuffix = text.match(/^(.*)\.(\d{1,3})$/);
+  if (msSuffix) {
+    const base = Date.parse(msSuffix[1]);
+    if (Number.isFinite(base)) {
+      return base + Number(String(msSuffix[2]).padEnd(3, '0'));
+    }
+  }
+
+  return 0;
+}
+
+function isTruthyCsvValue(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  return ['true', '1', 'yes', 'y', 'parsed', 'withdrawn'].includes(text) ||
+    ['已解析', '已撤回', '是'].includes(String(value ?? '').trim());
+}
+
+function parseCsvWithdrawnStatus(value) {
+  const text = String(value ?? '').trim();
+  const lower = text.toLowerCase();
+  return ['已撤回', '撤回'].includes(text) || ['withdrawn', 'true', '1', 'yes', 'y'].includes(lower);
+}
+
 function importBackupFromCSV() {
   const fileInput = document.getElementById('import-backup-file');
   const file = fileInput.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function (e) {
-    const text = e.target.result;
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) {
+    let rows;
+    try {
+      rows = parseCsvText(e.target.result || '');
+    } catch (err) {
+      alert(`CSV解析失败：${err.message}`);
+      return;
+    }
+
+    if (rows.length < 2) {
       alert('CSV文件无效或为空');
       return;
     }
-    const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+
+    const header = rows[0].map(normalizeCsvHeader);
     const idx = name => header.indexOf(name);
     const idxOr = (...names) => names.reduce((acc, n) => acc >= 0 ? acc : idx(n), -1);
-    
+
     const durationIdx = idxOr('Duration', '持续时间（分钟）');
+    const durationMsIdx = idxOr('DurationMs', '持续时间毫秒', '持续时间（毫秒）');
+    const formattedDurationIdx = idxOr('Formatted Time', 'FormattedTime', '格式化时间');
     const memoIdx = idxOr('Memo', '备注');
     const tagIdx = idxOr('Tag', '标签');
     const endTimeIdx = idxOr('EndTime', '结束时间');
-    const statusIdx = idx('状态');
-    
-    if (durationIdx < 0 || memoIdx < 0) {
-      alert('CSV格式不兼容：缺少必要字段');
+    const endTimeMsIdx = idxOr('EndTimeMs', '结束时间戳', '结束时间（毫秒）');
+    const setDurationIdx = idxOr('SetDuration', '指定持续时间（分钟）', '指定时间（分钟）');
+    const parsedIdx = idxOr('Parsed', '已解析');
+    const statusIdx = idxOr('Status', '状态', 'Withdrawn', 'withdrawn');
+
+    if (durationIdx < 0 && formattedDurationIdx < 0) {
+      alert('CSV格式不兼容：缺少持续时间字段');
       return;
     }
-    
+    if (memoIdx < 0) {
+      alert('CSV格式不兼容：缺少备注字段');
+      return;
+    }
+
+    const importedAt = Date.now();
     const result = [];
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const cells = lines[i].split(',').map(s => {
-        const unquoted = s.replace(/^"|"$/g, '');
-        return unquoted;
-      });
-      const withdrawn = statusIdx >= 0 && cells[statusIdx] === '已撤回';
+    for (let rowIdx = 1; rowIdx < rows.length; rowIdx++) {
+      const cells = rows[rowIdx];
+      if (!cells || cells.every(cell => String(cell).trim() === '')) continue;
+
+      const durationFromMs = durationMsIdx >= 0 ? Number(cells[durationMsIdx]) : 0;
+      const durationFromMinutes = durationIdx >= 0 ? Number.parseFloat(cells[durationIdx]) * 60000 : 0;
+      const durationFromText = formattedDurationIdx >= 0 ? parseDurationTextToMs(cells[formattedDurationIdx]) : 0;
+      const durationMs = Number.isFinite(durationFromMs) && durationFromMs > 0
+        ? durationFromMs
+        : (Number.isFinite(durationFromMinutes) && durationFromMinutes > 0 ? durationFromMinutes : durationFromText);
+      const formattedDuration = formattedDurationIdx >= 0 && cells[formattedDurationIdx]
+        ? cells[formattedDurationIdx]
+        : (durationMs ? formatTime(durationMs) : '');
+
+      let endTime = endTimeMsIdx >= 0 ? Number(cells[endTimeMsIdx]) : 0;
+      if (!Number.isFinite(endTime) || endTime <= 0) {
+        endTime = endTimeIdx >= 0 ? parseCsvEndTimeToMs(cells[endTimeIdx]) : 0;
+      }
+      if (!Number.isFinite(endTime) || endTime <= 0) {
+        endTime = importedAt;
+      }
+
+      const withdrawn = statusIdx >= 0 && parseCsvWithdrawnStatus(cells[statusIdx]);
+      const parsed = parsedIdx >= 0 ? isTruthyCsvValue(cells[parsedIdx]) : true;
+      const setDurationRaw = setDurationIdx >= 0 ? String(cells[setDurationIdx] ?? '').trim() : '';
+
       result.push({
-        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        duration: cells[idxOr('格式化时间')] || '',
-        durationMs: durationIdx >= 0 ? (parseFloat(cells[durationIdx]) * 60000 || 0) : 0,
+        id: `${Date.now()}_${rowIdx}_${Math.random().toString(36).slice(2)}`,
+        duration: formattedDuration,
+        durationMs: durationMs || 0,
         memo: memoIdx >= 0 ? cells[memoIdx] || '' : '',
         tag: tagIdx >= 0 ? cells[tagIdx] || '' : '',
-        setDuration: '',
-        endTime: endTimeIdx >= 0 ? (Date.parse(cells[endTimeIdx]) || Date.now()) : Date.now(),
-        parsed: true,
+        setDuration: setDurationRaw,
+        endTime,
+        parsed,
         withdrawn,
-        withdrawnAt: withdrawn ? Date.now() : null
+        withdrawnAt: withdrawn ? importedAt : null
       });
     }
+
+    if (!result.length) {
+      alert('CSV文件中没有可导入的记录');
+      return;
+    }
+
     localStorage.setItem('intervals', JSON.stringify(result));
+    localStorage.setItem('undoStack', JSON.stringify([]));
+    localStorage.setItem('redoStack', JSON.stringify([]));
     location.reload();
   };
   reader.readAsText(file);

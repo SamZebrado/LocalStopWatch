@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/local-stopwatch-test.js",
-    "install:playwright": "npx playwright install"
+    "test": "node tests/csv-roundtrip-test.js",
+    "install:playwright": "npx playwright install",
+    "test:e2e": "node tests/local-stopwatch-test.js"
   },
-  "devDependencies": {
-    "playwright": "file:../minimal-paper-pipeline/node_modules/playwright"
-  }
+  "devDependencies": {}
 }

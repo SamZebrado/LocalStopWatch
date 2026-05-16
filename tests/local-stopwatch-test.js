@@ -1,3 +1,5 @@
+const path = require('path');
+const { pathToFileURL } = require('url');
 const { chromium } = require('playwright');
 
 async function runTests() {
@@ -6,7 +8,7 @@ async function runTests() {
 
   try {
     // 导航到本地文件
-    await page.goto('file:///Users/samzebrado/Library/CloudStorage/GoogleDrive-sz68@nyu.edu/My Drive/Personal/PersonalCoding/LocalStopWatch/stopwatch_combined.html');
+    await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
 
     console.log('开始测试长按高级模式按钮显示字体配置...');
     // 测试长按高级模式按钮显示字体配置
