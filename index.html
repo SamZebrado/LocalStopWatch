@@ -87,20 +87,23 @@ function formatDateWithTimezone(date) {
   return `${dateStr}.${ms}`;
 }
 
-function buildIntervalsCsv() {
+function buildIntervalsCsv(includeWithdrawn = false) {
   const rows = [
-    ['持续时间（分钟）', '格式化时间', '备注', '标签', '结束时间']
+    ['持续时间（分钟）', '格式化时间', '备注', '标签', '结束时间', '状态']
   ];
 
   intervals.forEach(item => {
+    if (!includeWithdrawn && item.withdrawn) return; // 排除撤回记录
     const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '';
     const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
+    const status = item.withdrawn ? '已撤回' : '';
     rows.push([
       mins,
       item.duration || '',
       item.memo || '',
       item.tag || '',
-      endTimeStr
+      endTimeStr,
+      status
     ]);
   });
 
@@ -131,7 +134,7 @@ function exportIntervalsToCSV() {
     alert(getI18n('noRecords'));
     return;
   }
-  const csv = buildIntervalsCsv();
+  const csv = buildIntervalsCsv(false); // 普通导出排除撤回记录
   downloadCsvContent(csv, buildNormalCsvFilename(new Date()));
 }
 
@@ -141,7 +144,7 @@ function exportBackupCSVNoClear() {
     return;
   }
   const now = new Date();
-  const csv = buildIntervalsCsv();
+  const csv = buildIntervalsCsv(true); // 备份导出包含全部记录
   downloadCsvContent(csv, buildBackupCsvFilename(now));
   return now;
 }
@@ -497,8 +500,10 @@ function rememberInterval() {
   intervals.push(item);
   localStorage.setItem('intervals', JSON.stringify(intervals));
   
-  // 添加记录后清空撤回栈
+  // 添加记录后清空撤回栈和恢复栈，确保撤回后新增记录不能恢复旧撤回
+  undoStack = [];
   redoStack = [];
+  localStorage.setItem('undoStack', JSON.stringify(undoStack));
   localStorage.setItem('redoStack', JSON.stringify(redoStack));
 
   document.getElementById('memo-input').value = '';
@@ -1603,12 +1608,19 @@ function exportTomatoPotato() {
     return;
   }
 
+  // 过滤撤回记录，只导出未撤回的记录
+  const activeRecords = raw.filter(item => !item.withdrawn);
+  if (!activeRecords.length) {
+    alert('没有未撤回的记录可导出');
+    return;
+  }
+
   // 深拷贝防止修改原始数据
-  const intervals = JSON.parse(JSON.stringify(raw));
+  const intervals = JSON.parse(JSON.stringify(activeRecords));
 
   // 预处理：四舍五入每条 interval 的实际时长（单位：分钟）
-    intervals.forEach(item => {
-      item.actualMin = Math.round((item.durationMs || 0) / 60000);
+  intervals.forEach(item => {
+    item.actualMin = Math.round((item.durationMs || 0) / 60000);
     if (!item.setDuration && item.actualMin < 1) {
       item.setDuration = 1;
     }
@@ -2190,22 +2202,30 @@ function exportTomatoPotato() {
       // 渲染标签排行 - 按记录数
       const byCountEl = document.getElementById('stats-by-count');
       const sortedByCount = Object.entries(tagStats).sort((a, b) => b[1].count - a[1].count);
-      byCountEl.innerHTML = `<h4 style="margin-top:0;">按记录数</h4>` + sortedByCount.map(([tag, s]) => 
-        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
-          <span>${tag}</span>
-          <span style="font-weight:700;">${s.count}条</span>
-        </div>`
-      ).join('');
+      byCountEl.innerHTML = `<h4 style="margin-top:0;">按记录数</h4>` + (
+        sortedByCount.length
+          ? sortedByCount.map(([tag, s]) => 
+            `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+              <span>${tag}</span>
+              <span style="font-weight:700;">${s.count}条</span>
+            </div>`
+          ).join('')
+          : '<div style="color:var(--muted);">暂无标签数据</div>'
+      );
       
       // 渲染标签排行 - 按时长
       const byDurationEl = document.getElementById('stats-by-duration');
       const sortedByDuration = Object.entries(tagStats).sort((a, b) => b[1].duration - a[1].duration);
-      byDurationEl.innerHTML = `<h4 style="margin-top:0;">按时长</h4>` + sortedByDuration.map(([tag, s]) => 
-        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
-          <span>${tag}</span>
-          <span style="font-weight:700;">${formatDuration(s.duration)}</span>
-        </div>`
-      ).join('');
+      byDurationEl.innerHTML = `<h4 style="margin-top:0;">按时长</h4>` + (
+        sortedByDuration.length
+          ? sortedByDuration.map(([tag, s]) => 
+            `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+              <span>${tag}</span>
+              <span style="font-weight:700;">${formatDuration(s.duration)}</span>
+            </div>`
+          ).join('')
+          : '<div style="color:var(--muted);">暂无标签数据</div>'
+      );
       
       // 渲染每日时长
       const dailyStats = {};
