@@ -149,4 +149,26 @@ assert.strictEqual(importedOld[0].memo, '旧备份, 含逗号', 'old-style CSV m
 assert.strictEqual(importedOld[0].withdrawn, true, 'old-style withdrawn string should import');
 assert.strictEqual(importedOld[0].endTime, 1778922000123, 'old-style end time should import with millisecond suffix preserved');
 
-console.log('CSV round-trip test passed.');
+
+storage.set('ruleTable', JSON.stringify([
+  { tag: '工作', keywords: ['!wk'] },
+  { tag: '学习', keywords: ['paper'] },
+  { tag: '休息', keywords: ['~加班'] }
+]));
+const derivedTags = vm.runInContext(`deriveStatsTagsFromMemo('今天读 paper 然后收尾wk 25', loadStatsRules())`, context);
+assert.deepStrictEqual(derivedTags, ['#工作', '#学习'], 'stats should temporarily derive tags from memo parsing rules');
+
+vm.runInContext(`intervals = [{ memo: '今天读 paper', tag: '', durationMs: 60000, endTime: Date.now(), withdrawn: false }]`, context);
+const beforeStatsParse = vm.runInContext(`JSON.stringify(intervals[0])`, context);
+const statsTags = vm.runInContext(`getStatsTagsForRecord(intervals[0], loadStatsRules())`, context);
+const afterStatsParse = vm.runInContext(`JSON.stringify(intervals[0])`, context);
+assert.deepStrictEqual(statsTags, ['#学习'], 'stats should use temporary parsed tags when record tag is empty');
+assert.strictEqual(afterStatsParse, beforeStatsParse, 'stats-only parsing should not mutate saved interval records');
+
+vm.runInContext(`intervals = [{ memo: 'legacy', tag: '', durationMs: 1, endTime: 12345 }]; migrateLegacyIntervals();`, context);
+const migratedLegacy = vm.runInContext(`intervals[0]`, context);
+assert.ok(migratedLegacy.id && migratedLegacy.id.startsWith('legacy_'), 'migration should add id to legacy records');
+assert.strictEqual(migratedLegacy.withdrawn, false, 'migration should default legacy withdrawn to false');
+assert.strictEqual(migratedLegacy.withdrawnAt, null, 'migration should default legacy withdrawnAt to null');
+
+console.log('CSV round-trip and stats parsing tests passed.');

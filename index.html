@@ -14,6 +14,55 @@ let intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
 let logs = JSON.parse(localStorage.getItem('logs') || '[]');
 let undoStack = JSON.parse(localStorage.getItem('undoStack') || '[]'); // 撤回栈：记录被删除的item和其原始索引
 let redoStack = JSON.parse(localStorage.getItem('redoStack') || '[]'); // 重做栈
+migrateLegacyIntervals();
+
+function migrateLegacyIntervals() {
+  // 为旧版本 LocalStorage 记录补齐新字段。
+  // Add new fields to legacy LocalStorage records without changing memo/tag content.
+  if (!Array.isArray(intervals)) {
+    intervals = [];
+    localStorage.setItem('intervals', JSON.stringify(intervals));
+    return;
+  }
+
+  let changed = false;
+  intervals = intervals.map((item, idx) => {
+    if (!item || typeof item !== 'object') {
+      changed = true;
+      return {
+        id: `legacy_${Date.now()}_${idx}_${Math.random().toString(36).slice(2)}`,
+        memo: String(item ?? ''),
+        tag: '',
+        duration: '',
+        durationMs: 0,
+        endTime: Date.now(),
+        setDuration: '',
+        parsed: false,
+        withdrawn: false,
+        withdrawnAt: null
+      };
+    }
+
+    if (!item.id) {
+      const stableTime = Number(item.endTime) || Date.now();
+      item.id = `legacy_${stableTime}_${idx}_${Math.random().toString(36).slice(2)}`;
+      changed = true;
+    }
+    if (typeof item.withdrawn === 'undefined') {
+      item.withdrawn = false;
+      changed = true;
+    }
+    if (typeof item.withdrawnAt === 'undefined') {
+      item.withdrawnAt = null;
+      changed = true;
+    }
+    return item;
+  });
+
+  if (changed) {
+    localStorage.setItem('intervals', JSON.stringify(intervals));
+  }
+}
 const NUTSTORE_CFG_KEY = 'nutstore_backup_config_v1';
 const NUTSTORE_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
@@ -2231,6 +2280,7 @@ function exportTomatoPotato() {
   <!-- 统计页面 -->
   <div id="tab-stats" class="tab-content" style="display:none">
     <h2 data-zh="📊 统计回顾" data-mix="📊 统计回顾" data-en="📊 Stats Overview">📊 统计回顾</h2>
+    <p style="color:var(--muted); margin-top:0;" data-zh="统计页会临时按备注解析规则识别标签，不会修改计时器页面里的原始记录。" data-mix="统计页会临时按Memo解析规则识别标签，不会修改计时器页面里的原始记录。" data-en="The stats page temporarily derives tags from memo parsing rules without changing saved records on the timer page.">统计页会临时按Memo解析规则识别标签，不会修改计时器页面里的原始记录。</p>
     
     <!-- 时间范围切换 -->
     <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
@@ -2342,13 +2392,101 @@ function exportTomatoPotato() {
       
       renderStats();
     }
+
+    function loadStatsRules() {
+      try {
+        const rules = JSON.parse(localStorage.getItem('ruleTable') || '[]');
+        return Array.isArray(rules) ? rules : [];
+      } catch (err) {
+        console.warn('Failed to load ruleTable for stats:', err);
+        return [];
+      }
+    }
+
+    function normalizeStatsTag(tag) {
+      const text = String(tag ?? '').trim();
+      if (!text) return '';
+      return text.startsWith('#') ? text : `#${text}`;
+    }
+
+    function splitStatsTags(tagText) {
+      return String(tagText || '')
+        .split(/\s+/)
+        .map(normalizeStatsTag)
+        .filter(Boolean);
+    }
+
+    function deriveStatsTagsFromMemo(memo, rules) {
+      // 统计页专用的临时解析：只计算标签，不写回 interval。
+      // Stats-only temporary parsing: compute tags without mutating saved records.
+      let keywordRegion = String(memo || '').trim();
+      keywordRegion = keywordRegion.replace(/(\d+)\s*$/, '').trim();
+
+      const tags = new Set();
+      for (const col of rules) {
+        if (!col || !Array.isArray(col.keywords)) continue;
+
+        let includeTag = false;
+        let hasNegationHit = false;
+
+        for (const keyword of col.keywords) {
+          if (!keyword) break; // 与 parseMemo 保持一致：空白行中断该列处理
+
+          const rawKeyword = String(keyword);
+          const isNegation = rawKeyword.startsWith('~');
+          const isForceDelete = rawKeyword.includes('!');
+          const cleaned = rawKeyword.replace(/[~!]/g, '');
+          if (!cleaned) continue;
+
+          if (isForceDelete) {
+            const suffixMatch = keywordRegion.match(/([a-zA-Z0-9]+)$/);
+            if (suffixMatch) {
+              const suffix = suffixMatch[1];
+              if (suffix.includes(cleaned)) {
+                const newSuffix = suffix.replace(new RegExp(cleaned, 'g'), '');
+                keywordRegion = keywordRegion.slice(0, -suffix.length) + newSuffix;
+                includeTag = true;
+              }
+            }
+          }
+
+          if (isNegation && keywordRegion.includes(cleaned)) {
+            hasNegationHit = true;
+          }
+
+          if (!isNegation && !isForceDelete && keywordRegion.includes(cleaned)) {
+            includeTag = true;
+          }
+        }
+
+        if (includeTag && !hasNegationHit) {
+          const normalized = normalizeStatsTag(col.tag);
+          if (normalized) tags.add(normalized);
+        }
+      }
+
+      return Array.from(tags);
+    }
+
+    function getStatsTagsForRecord(record, rules) {
+      const parsedTags = deriveStatsTagsFromMemo(record.memo, rules);
+      if (parsedTags.length) return parsedTags;
+      return splitStatsTags(record.tag || '');
+    }
     
     function renderStats() {
       const now = Date.now();
       const cutoff = now - (currentStatsRange * 24 * 60 * 60 * 1000);
       
-      // 筛选未撤回的记录
-      const validRecords = intervals.filter(r => !r.withdrawn && r.endTime > cutoff);
+      // 筛选未撤回的记录，并在统计页临时按解析规则推导标签。
+      // Filter active records and derive stats-only tags from memo parsing rules.
+      const statsRules = loadStatsRules();
+      const validRecords = intervals
+        .filter(r => !r.withdrawn && Number(r.endTime) > cutoff)
+        .map(r => ({
+          ...r,
+          statsTags: getStatsTagsForRecord(r, statsRules)
+        }));
       
       // 计算基础汇总
       const totalRecords = validRecords.length;
@@ -2358,7 +2496,7 @@ function exportTomatoPotato() {
       // 统计标签
       const tagStats = {};
       validRecords.forEach(r => {
-        const tags = (r.tag || '').split(/\s+/).filter(t => t);
+        const tags = r.statsTags || [];
         tags.forEach(t => {
           if (!tagStats[t]) tagStats[t] = { count: 0, duration: 0 };
           tagStats[t].count++;
