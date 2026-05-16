@@ -12,6 +12,8 @@ let t_Initial = Number(localStorage.getItem('t_Initial')) || Date.now();
 let t_Last = Number(localStorage.getItem('t_Last')) || t_Initial;
 let intervals = JSON.parse(localStorage.getItem('intervals') || '[]');
 let logs = JSON.parse(localStorage.getItem('logs') || '[]');
+let undoStack = JSON.parse(localStorage.getItem('undoStack') || '[]'); // 撤回栈：记录被删除的item和其原始索引
+let redoStack = JSON.parse(localStorage.getItem('redoStack') || '[]'); // 重做栈
 const NUTSTORE_CFG_KEY = 'nutstore_backup_config_v1';
 const NUTSTORE_BASE_URL = 'https://dav.jianguoyun.com/dav/';
 const NUTSTORE_REQUIRED_PREFIX = 'NewMars/';
@@ -174,6 +176,13 @@ function renderIntervals() {
     const trueIndex = intervals.length - 1 - index;
     const div = document.createElement('div');
     div.className = 'interval-record';
+    
+    // 如果是软撤回的记录，视觉上弱化显示
+    if (item.withdrawn) {
+      div.style.opacity = '0.5';
+      div.style.background = 'rgba(128, 128, 128, 0.1)';
+    }
+    
     const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '--';
     const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
     const advancedFields = isAdvancedMode ? `
@@ -187,13 +196,15 @@ function renderIntervals() {
     const simpleModeDuration = !isAdvancedMode && item.parsed && item.setDuration ? `
       <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em;">${item.setDuration}分钟</span>
     ` : '';
+    const withdrawnIndicator = item.withdrawn ? `<div style="color: #666; font-style: italic;">已撤回</div>` : '';
     div.innerHTML = `
+      ${withdrawnIndicator}
       <div><strong class="duration">${mins} 分钟</strong></div>
       <div>Memo: ${simpleModeTag}<input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)">${simpleModeDuration}</div>
       ${advancedFields}
       <div>结束时间: ${endTimeStr}</div>
-      <button onclick="parseMemo(${trueIndex})">解析Memo</button>
-      <button onclick="undoParse(${trueIndex})">撤销</button>
+      <button onclick="parseMemo(${trueIndex})" ${item.withdrawn ? 'disabled' : ''}>解析Memo</button>
+      <button onclick="undoParse(${trueIndex})" ${item.withdrawn ? 'disabled' : ''}>撤销</button>
     `;
     if (isAdvancedMode && item.parsed) div.style.background = '#eee';
     container.appendChild(div);
@@ -470,6 +481,7 @@ function rememberInterval() {
   const memo = document.getElementById('memo-input').value.trim();
 
   const item = {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2)}`, // 唯一ID
     memo,
     tag: '',
     duration: formatTime(durationMs),
@@ -477,17 +489,110 @@ function rememberInterval() {
     endTime: now,
     setDuration: '',
     originalMemo: memo,
-    parsed: false
+    parsed: false,
+    withdrawn: false, // 软撤回标记
+    withdrawnAt: null
   };
 
   intervals.push(item);
   localStorage.setItem('intervals', JSON.stringify(intervals));
+  
+  // 添加记录后清空撤回栈
+  redoStack = [];
+  localStorage.setItem('redoStack', JSON.stringify(redoStack));
 
   document.getElementById('memo-input').value = '';
 
   t_Last = now;
   localStorage.setItem('t_Last', t_Last);
   renderIntervals();
+  updateUndoRedoButtons(); // 更新撤回/恢复按钮状态
+}
+
+// === 撤回/恢复功能 ===
+function undoLastRecord() {
+  if (!intervals.length) {
+    alert('没有记录可以撤回');
+    return;
+  }
+  
+  // 只处理未撤回的最后一条记录
+  const lastIndex = intervals.length - 1;
+  if (intervals[lastIndex].withdrawn) {
+    alert('最后一条记录已经被撤回');
+    return;
+  }
+  
+  const item = intervals[lastIndex];
+  // 软撤回
+  item.withdrawn = true;
+  item.withdrawnAt = Date.now();
+  
+  // 记录到撤回栈
+  undoStack.push({
+    index: lastIndex,
+    itemId: item.id
+  });
+  localStorage.setItem('undoStack', JSON.stringify(undoStack));
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+  
+  // 恢复秒表到误点前的起点
+  if (intervals.length === lastIndex + 1) {
+    t_Last = item.endTime - item.durationMs;
+    localStorage.setItem('t_Last', t_Last);
+  }
+  
+  renderIntervals();
+  updateUndoRedoButtons();
+}
+
+function redoLastRecord() {
+  if (!undoStack.length) {
+    alert('没有记录可以恢复');
+    return;
+  }
+  
+  const undoItem = undoStack.pop();
+  const item = intervals[undoItem.index];
+  if (!item || item.id !== undoItem.itemId) {
+    alert('记录状态已改变，无法恢复');
+    return;
+  }
+  
+  // 恢复
+  item.withdrawn = false;
+  item.withdrawnAt = null;
+  
+  // 记录到重做栈
+  redoStack.push({
+    index: undoItem.index,
+    itemId: undoItem.itemId
+  });
+  localStorage.setItem('redoStack', JSON.stringify(redoStack));
+  localStorage.setItem('undoStack', JSON.stringify(undoStack));
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+  
+  // 恢复秒表
+  if (intervals.length === undoItem.index + 1) {
+    t_Last = item.endTime;
+    localStorage.setItem('t_Last', t_Last);
+  }
+  
+  renderIntervals();
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  // 更新按钮可见性或状态
+  const undoBtn = document.getElementById('undo-last-btn');
+  const redoBtn = document.getElementById('redo-last-btn');
+  
+  if (undoBtn) {
+    undoBtn.disabled = !intervals.length || intervals[intervals.length - 1].withdrawn;
+  }
+  if (redoBtn) {
+    redoBtn.disabled = !undoStack.length;
+  }
 }
 
 function updateTag(index, value) {
@@ -1502,8 +1607,8 @@ function exportTomatoPotato() {
   const intervals = JSON.parse(JSON.stringify(raw));
 
   // 预处理：四舍五入每条 interval 的实际时长（单位：分钟）
-  intervals.forEach(item => {
-    item.actualMin = Math.round(item.duration / 60000);
+    intervals.forEach(item => {
+      item.actualMin = Math.round((item.durationMs || 0) / 60000);
     if (!item.setDuration && item.actualMin < 1) {
       item.setDuration = 1;
     }
@@ -1773,6 +1878,7 @@ function exportTomatoPotato() {
     <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义备注解析规则" data-mix="定义Memo解析规则" data-en="Memo Parsing Rules">定义备注解析规则</button>
     <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志和备份" data-mix="运行日志和备份" data-en="Log & Backups">运行日志和备份</button>
     <button id="tab-export-btn" class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export" style="display:none">番茄土豆格式导出</button>
+    <button class="tab-button" onclick="showTab('tab-stats')" data-zh="📊 统计" data-mix="📊 统计" data-en="📊 Stats">📊 统计</button>
 
   </div>
 
@@ -1795,6 +1901,10 @@ function exportTomatoPotato() {
       <input id="memo-input" placeholder="当前记录段的备注..." maxlength="1000">
       <div class="control-row control-row-primary">
         <button onclick="rememberInterval()" data-zh="📌 记下" data-mix="📌 记下" data-en="📌 Remember">📌 记下</button>
+      </div>
+      <div class="control-row control-row-secondary">
+        <button id="undo-last-btn" onclick="undoLastRecord()" data-zh="↩️ 撤回上一条" data-mix="↩️ 撤回上一条" data-en="↩️ Undo Last">↩️ 撤回上一条</button>
+        <button id="redo-last-btn" onclick="redoLastRecord()" data-zh="↪️ 恢复上一条" data-mix="↪️ 恢复上一条" data-en="↪️ Redo Last">↪️ 恢复上一条</button>
       </div>
       <div class="control-row control-row-secondary">
         <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
@@ -1911,6 +2021,33 @@ function exportTomatoPotato() {
       <button onclick="closeThemePickerDialog()" data-zh="关闭" data-mix="关闭" data-en="Close">关闭</button>
     </div>
   </div>
+
+  <!-- 统计页面 -->
+  <div id="tab-stats" class="tab-content" style="display:none">
+    <h2 data-zh="📊 统计回顾" data-mix="📊 统计回顾" data-en="📊 Stats Overview">📊 统计回顾</h2>
+    
+    <!-- 时间范围切换 -->
+    <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+      <button onclick="switchStatsRange(7)" id="range-7-btn" style="font-weight:bold;">最近 7 天</button>
+      <button onclick="switchStatsRange(30)" id="range-30-btn">最近 30 天</button>
+      <button onclick="switchStatsRange(365)" id="range-365-btn">最近 365 天</button>
+    </div>
+    
+    <!-- 基础汇总 -->
+    <div id="stats-summary" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
+    
+    <!-- 标签排行 -->
+    <h3 data-zh="🏷️ 标签排行" data-mix="🏷️ 标签排行" data-en="🏷️ Tag Ranking">🏷️ 标签排行</h3>
+    <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+      <div id="stats-by-count" style="flex:1 1 45%; min-width:250px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+      <div id="stats-by-duration" style="flex:1 1 45%; min-width:250px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+    </div>
+    
+    <!-- 每日时长 -->
+    <h3 data-zh="📅 每日总时长" data-mix="📅 每日总时长" data-en="📅 Daily Duration">📅 每日总时长</h3>
+    <div id="stats-daily" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+  </div>
+
   <footer>
     <hr>
     <small>参考了原网页 https://stopwatch.online-timers.com/stopwatch-with-time-intervals 的功能，由 ChatGPT 重新编写代码并添加了个性化修改。<br>项目地址：<a href="https://github.com/SamZebrado/LocalStopWatch" target="_blank">https://github.com/SamZebrado/LocalStopWatch</a></small>
@@ -1978,6 +2115,140 @@ function exportTomatoPotato() {
   // 页面加载后应用语言
   document.addEventListener('DOMContentLoaded', updateLangUI);
 
+  </script>
+
+  <script>
+    // === 统计功能 ===
+    let currentStatsRange = 7; // 默认7天
+    
+    function switchStatsRange(days) {
+      currentStatsRange = days;
+      // 更新按钮状态
+      document.querySelectorAll('[id^="range-"]').forEach(btn => btn.style.fontWeight = 'normal');
+      const activeBtn = document.getElementById(`range-${days}-btn`);
+      if (activeBtn) activeBtn.style.fontWeight = 'bold';
+      
+      renderStats();
+    }
+    
+    function renderStats() {
+      const now = Date.now();
+      const cutoff = now - (currentStatsRange * 24 * 60 * 60 * 1000);
+      
+      // 筛选未撤回的记录
+      const validRecords = intervals.filter(r => !r.withdrawn && r.endTime > cutoff);
+      
+      // 计算基础汇总
+      const totalRecords = validRecords.length;
+      const totalDurationMs = validRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+      const avgDurationMs = totalRecords ? totalDurationMs / totalRecords : 0;
+      
+      // 统计标签
+      const tagStats = {};
+      validRecords.forEach(r => {
+        const tags = (r.tag || '').split(/\s+/).filter(t => t);
+        tags.forEach(t => {
+          if (!tagStats[t]) tagStats[t] = { count: 0, duration: 0 };
+          tagStats[t].count++;
+          tagStats[t].duration += r.durationMs || 0;
+        });
+      });
+      
+      // 找最常见标签
+      let mostCommonTag = '无';
+      let maxCount = 0;
+      for (const t in tagStats) {
+        if (tagStats[t].count > maxCount) {
+          maxCount = tagStats[t].count;
+          mostCommonTag = t;
+        }
+      }
+      
+      // 渲染基础汇总
+      const summaryEl = document.getElementById('stats-summary');
+      summaryEl.innerHTML = `
+        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+          <div style="flex:1 1 200px;">
+            <div style="font-size:0.8rem; color:var(--muted);">总记录数</div>
+            <div style="font-size:1.8rem; font-weight:700;">${totalRecords}</div>
+          </div>
+          <div style="flex:1 1 200px;">
+            <div style="font-size:0.8rem; color:var(--muted);">总时长</div>
+            <div style="font-size:1.8rem; font-weight:700;">${formatDuration(totalDurationMs)}</div>
+          </div>
+          <div style="flex:1 1 200px;">
+            <div style="font-size:0.8rem; color:var(--muted);">平均每条</div>
+            <div style="font-size:1.8rem; font-weight:700;">${formatDuration(avgDurationMs)}</div>
+          </div>
+          <div style="flex:1 1 200px;">
+            <div style="font-size:0.8rem; color:var(--muted);">最常见标签</div>
+            <div style="font-size:1.8rem; font-weight:700;">${mostCommonTag}</div>
+          </div>
+        </div>
+      `;
+      
+      // 渲染标签排行 - 按记录数
+      const byCountEl = document.getElementById('stats-by-count');
+      const sortedByCount = Object.entries(tagStats).sort((a, b) => b[1].count - a[1].count);
+      byCountEl.innerHTML = `<h4 style="margin-top:0;">按记录数</h4>` + sortedByCount.map(([tag, s]) => 
+        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+          <span>${tag}</span>
+          <span style="font-weight:700;">${s.count}条</span>
+        </div>`
+      ).join('');
+      
+      // 渲染标签排行 - 按时长
+      const byDurationEl = document.getElementById('stats-by-duration');
+      const sortedByDuration = Object.entries(tagStats).sort((a, b) => b[1].duration - a[1].duration);
+      byDurationEl.innerHTML = `<h4 style="margin-top:0;">按时长</h4>` + sortedByDuration.map(([tag, s]) => 
+        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+          <span>${tag}</span>
+          <span style="font-weight:700;">${formatDuration(s.duration)}</span>
+        </div>`
+      ).join('');
+      
+      // 渲染每日时长
+      const dailyStats = {};
+      validRecords.forEach(r => {
+        const d = new Date(r.endTime);
+        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!dailyStats[key]) dailyStats[key] = 0;
+        dailyStats[key] += r.durationMs || 0;
+      });
+      
+      const dailyEl = document.getElementById('stats-daily');
+      const sortedDays = Object.keys(dailyStats).sort().reverse();
+      dailyEl.innerHTML = sortedDays.map(day => 
+        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+          <span>${day}</span>
+          <span style="font-weight:700;">${formatDuration(dailyStats[day])}</span>
+        </div>`
+      ).join('') || '<div style="color:var(--muted);">暂无数据</div>';
+    }
+    
+    function formatDuration(ms) {
+      if (!ms) return '0分钟';
+      const totalMinutes = Math.round(ms / 60000);
+      if (totalMinutes < 60) return `${totalMinutes}分钟`;
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      return mins ? `${hours}小时${mins}分钟` : `${hours}小时`;
+    }
+    
+    // 页面加载时初始化统计
+    document.addEventListener('DOMContentLoaded', () => {
+      // 在 showTab 函数中添加对 tab-stats 的处理
+      const originalShowTab = window.showTab;
+      window.showTab = function(id) {
+        originalShowTab(id);
+        if (id === 'tab-stats') {
+          renderStats();
+        }
+      };
+      
+      // 初始化按钮状态
+      updateUndoRedoButtons();
+    });
   </script>
 </body>
 </html>
