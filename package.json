@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/csv-roundtrip-test.js",
+    "test": "node tests/csv-roundtrip-test.js && node tests/stats-aggregation-test.js",
     "install:playwright": "npx playwright install",
     "test:e2e": "node tests/local-stopwatch-test.js"
   },

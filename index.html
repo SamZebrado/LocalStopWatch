@@ -251,13 +251,13 @@ function renderIntervals() {
     const trueIndex = intervals.length - 1 - index;
     const div = document.createElement('div');
     div.className = 'interval-record';
-    
+
     // 如果是软撤回的记录，视觉上弱化显示
     if (item.withdrawn) {
       div.style.opacity = '0.5';
       div.style.background = 'rgba(128, 128, 128, 0.1)';
     }
-    
+
     const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '--';
     const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
     const advancedFields = isAdvancedMode ? `
@@ -571,7 +571,7 @@ function rememberInterval() {
 
   intervals.push(item);
   localStorage.setItem('intervals', JSON.stringify(intervals));
-  
+
   // 添加记录后清空撤回栈和恢复栈，确保撤回后新增记录不能恢复旧撤回
   undoStack = [];
   redoStack = [];
@@ -592,19 +592,19 @@ function undoLastRecord() {
     alert('没有记录可以撤回');
     return;
   }
-  
+
   // 只处理未撤回的最后一条记录
   const lastIndex = intervals.length - 1;
   if (intervals[lastIndex].withdrawn) {
     alert('最后一条记录已经被撤回');
     return;
   }
-  
+
   const item = intervals[lastIndex];
   // 软撤回
   item.withdrawn = true;
   item.withdrawnAt = Date.now();
-  
+
   // 记录到撤回栈
   undoStack.push({
     index: lastIndex,
@@ -612,13 +612,13 @@ function undoLastRecord() {
   });
   localStorage.setItem('undoStack', JSON.stringify(undoStack));
   localStorage.setItem('intervals', JSON.stringify(intervals));
-  
+
   // 恢复秒表到误点前的起点
   if (intervals.length === lastIndex + 1) {
     t_Last = item.endTime - item.durationMs;
     localStorage.setItem('t_Last', t_Last);
   }
-  
+
   renderIntervals();
   updateUndoRedoButtons();
 }
@@ -628,18 +628,18 @@ function redoLastRecord() {
     alert('没有记录可以恢复');
     return;
   }
-  
+
   const undoItem = undoStack.pop();
   const item = intervals[undoItem.index];
   if (!item || item.id !== undoItem.itemId) {
     alert('记录状态已改变，无法恢复');
     return;
   }
-  
+
   // 恢复
   item.withdrawn = false;
   item.withdrawnAt = null;
-  
+
   // 记录到重做栈
   redoStack.push({
     index: undoItem.index,
@@ -648,13 +648,13 @@ function redoLastRecord() {
   localStorage.setItem('redoStack', JSON.stringify(redoStack));
   localStorage.setItem('undoStack', JSON.stringify(undoStack));
   localStorage.setItem('intervals', JSON.stringify(intervals));
-  
+
   // 恢复秒表
   if (intervals.length === undoItem.index + 1) {
     t_Last = item.endTime;
     localStorage.setItem('t_Last', t_Last);
   }
-  
+
   renderIntervals();
   updateUndoRedoButtons();
 }
@@ -663,7 +663,7 @@ function updateUndoRedoButtons() {
   // 更新按钮可见性或状态
   const undoBtn = document.getElementById('undo-last-btn');
   const redoBtn = document.getElementById('redo-last-btn');
-  
+
   if (undoBtn) {
     undoBtn.disabled = !intervals.length || intervals[intervals.length - 1].withdrawn;
   }
@@ -1498,7 +1498,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 高级模式按钮长按功能
   const advancedToggle = document.getElementById('advanced-toggle');
   let longPressTimer;
-  
+
   advancedToggle.addEventListener('mousedown', () => {
     longPressTimer = setTimeout(() => {
       // 长按：显示/隐藏字体配置
@@ -1508,17 +1508,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 500);
   });
-  
+
   advancedToggle.addEventListener('mouseup', () => {
     clearTimeout(longPressTimer);
   });
-  
+
   advancedToggle.addEventListener('mouseleave', () => {
     clearTimeout(longPressTimer);
   });
-  
+
   advancedToggle.addEventListener('click', toggleAdvancedMode);
-  
+
   // 移动端触摸事件
   advancedToggle.addEventListener('touchstart', () => {
     longPressTimer = setTimeout(() => {
@@ -1529,7 +1529,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 500);
   });
-  
+
   advancedToggle.addEventListener('touchend', () => {
     clearTimeout(longPressTimer);
   });
@@ -1712,6 +1712,120 @@ function undoClearRules() {
     localStorage.setItem('ruleTable', JSON.stringify(ruleTable));
     renderRuleTable();
   }
+}
+
+function importMockData() {
+  if (!confirm('这将添加测试数据用于统计功能验证。是否继续？')) {
+    return;
+  }
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const hourMs = 60 * 60 * 1000;
+  const minMs = 60 * 1000;
+  const mockRecords = [];
+
+  const tags = ['#工作', '#学习', '#运动', '#休息', '#娱乐'];
+  const memos = ['完成报告', '阅读书籍', '跑步30分钟', '看剧放松', '写代码'];
+
+  // === 固定测试样例 ===
+
+  // 1. 跨零点：昨天23:30 - 今天00:30（2小时）
+  const yesterday = new Date(now - dayMs);
+  const yesterday23_30 = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 30, 0).getTime();
+  mockRecords.push({
+    startTime: yesterday23_30,
+    endTime: yesterday23_30 + 2 * hourMs,
+    durationMs: 2 * hourMs,
+    tag: '#工作',
+    memo: '加班到凌晨',
+    withdrawn: false
+  });
+
+  // 2. 跨多天：第3天23:00 - 第5天01:00（2天2小时）
+  const day3 = new Date(now - 3 * dayMs);
+  const day3_23_00 = new Date(day3.getFullYear(), day3.getMonth(), day3.getDate(), 23, 0, 0).getTime();
+  mockRecords.push({
+    startTime: day3_23_00,
+    endTime: day3_23_00 + 2 * dayMs + hourMs,
+    durationMs: 2 * dayMs + hourMs,
+    tag: '#工作',
+    memo: '项目冲刺',
+    withdrawn: false
+  });
+
+  // 3. 多标签记录：#工作 #学习
+  const todayStart = new Date();
+  todayStart.setHours(9, 0, 0, 0);
+  mockRecords.push({
+    startTime: todayStart.getTime(),
+    endTime: todayStart.getTime() + 90 * minMs,
+    durationMs: 90 * minMs,
+    tag: '#工作 #学习',
+    memo: '技术分享',
+    withdrawn: false
+  });
+
+  // 4. 无标签记录（应进入 #未分类）
+  mockRecords.push({
+    startTime: todayStart.getTime() + 3 * hourMs,
+    endTime: todayStart.getTime() + 4 * hourMs,
+    durationMs: hourMs,
+    tag: '',
+    memo: '无标签记录',
+    withdrawn: false
+  });
+
+  // 5. withdrawn 记录（不应参与统计）
+  mockRecords.push({
+    startTime: todayStart.getTime() + 5 * hourMs,
+    endTime: todayStart.getTime() + 6 * hourMs,
+    durationMs: hourMs,
+    tag: '#休息',
+    memo: '这条被撤回了',
+    withdrawn: true
+  });
+
+  // 6. memo可被ruleTable解析但原tag为空（假设有"报告"关键词匹配#工作）
+  mockRecords.push({
+    startTime: todayStart.getTime() + 7 * hourMs,
+    endTime: todayStart.getTime() + 8 * hourMs,
+    durationMs: hourMs,
+    tag: '',
+    memo: '写报告',
+    withdrawn: false
+  });
+
+  // === 随机测试数据（7天，每天3-6条）===
+  for (let d = 0; d < 7; d++) {
+    const dayStart = now - (d * dayMs);
+    const recordsPerDay = 3 + Math.floor(Math.random() * 4);
+
+    for (let r = 0; r < recordsPerDay; r++) {
+      const startOffset = (r * dayMs / recordsPerDay) + (Math.random() * 2 * hourMs);
+      const duration = (30 + Math.random() * 120) * minMs;
+
+      const tagIdx = Math.floor(Math.random() * tags.length);
+      const memoIdx = Math.floor(Math.random() * memos.length);
+
+      mockRecords.push({
+        startTime: dayStart + startOffset,
+        endTime: dayStart + startOffset + duration,
+        durationMs: duration,
+        tag: tags[tagIdx],
+        memo: memos[memoIdx],
+        withdrawn: false
+      });
+    }
+  }
+
+  const existingIntervals = JSON.parse(localStorage.getItem('intervals') || '[]');
+  const combined = [...existingIntervals, ...mockRecords];
+  localStorage.setItem('intervals', JSON.stringify(combined));
+  intervals = combined;
+
+  renderIntervals();
+  showNotification(`已添加 ${mockRecords.length} 条测试数据（6个边界样例 + ${mockRecords.length - 6}条随机）`);
 }
 
 function clearRuleTable() {
@@ -2164,6 +2278,7 @@ function exportTomatoPotato() {
       <div class="control-row control-row-secondary">
         <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
         <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
+        <button onclick="importMockData()" data-zh="🧪 导入测试数据" data-mix="🧪 导入测试数据" data-en="🧪 Import Test Data">🧪 导入测试数据</button>
       </div>
     </section>
     <div id="interval-controls"></div>
@@ -2252,7 +2367,7 @@ function exportTomatoPotato() {
       </div>
       <div id="backup-reminder-status" style="font-size:0.9rem; color:var(--muted);"></div>
     </div>
-    
+
   </div>
 
   <div id="confirm-clear-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); position:fixed; top:30%; left:30%; z-index:9999; box-shadow:var(--dialog-shadow);">
@@ -2281,27 +2396,46 @@ function exportTomatoPotato() {
   <div id="tab-stats" class="tab-content" style="display:none">
     <h2 data-zh="📊 统计回顾" data-mix="📊 统计回顾" data-en="📊 Stats Overview">📊 统计回顾</h2>
     <p style="color:var(--muted); margin-top:0;" data-zh="统计页会临时按备注解析规则识别标签，不会修改计时器页面里的原始记录。" data-mix="统计页会临时按Memo解析规则识别标签，不会修改计时器页面里的原始记录。" data-en="The stats page temporarily derives tags from memo parsing rules without changing saved records on the timer page.">统计页会临时按Memo解析规则识别标签，不会修改计时器页面里的原始记录。</p>
-    
+
+    <!-- 均摊开关 -->
+    <div style="margin-bottom:1rem;">
+      <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="stats-split-toggle" onchange="setStatsSplitMultiTagDuration(this.checked)" style="width:1.1rem; height:1.1rem;">
+        <span data-zh="均摊多标签时长" data-mix="均摊多标签时长" data-en="Split multi-tag duration">均摊多标签时长</span>
+      </label>
+    </div>
+
     <!-- 时间范围切换 -->
     <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
-      <button onclick="switchStatsRange(7)" id="range-7-btn" style="font-weight:bold;">最近 7 天</button>
-      <button onclick="switchStatsRange(30)" id="range-30-btn">最近 30 天</button>
-      <button onclick="switchStatsRange(365)" id="range-365-btn">最近 365 天</button>
+      <button onclick="switchStatsRange(7)" id="range-7-btn" style="flex:1; min-width:80px; font-weight:bold;">最近 7 天</button>
+      <button onclick="switchStatsRange(30)" id="range-30-btn" style="flex:1; min-width:80px;">最近 30 天</button>
+      <button onclick="switchStatsRange(365)" id="range-365-btn" style="flex:1; min-width:80px;">最近 365 天</button>
     </div>
-    
+
     <!-- 基础汇总 -->
     <div id="stats-summary" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem; margin-bottom:1rem;"></div>
-    
+
     <!-- 标签排行 -->
     <h3 data-zh="🏷️ 标签排行" data-mix="🏷️ 标签排行" data-en="🏷️ Tag Ranking">🏷️ 标签排行</h3>
     <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
       <div id="stats-by-count" style="flex:1 1 45%; min-width:250px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
       <div id="stats-by-duration" style="flex:1 1 45%; min-width:250px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
     </div>
-    
+
     <!-- 每日时长 -->
     <h3 data-zh="📅 每日总时长" data-mix="📅 每日总时长" data-en="📅 Daily Duration">📅 每日总时长</h3>
     <div id="stats-daily" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+
+    <!-- 可视化图表 -->
+    <h3 data-zh="📊 可视化" data-mix="📊 可视化" data-en="📊 Visualization">📊 可视化</h3>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1rem; margin-bottom:1rem;">
+      <div id="stats-pie" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+      <div id="stats-bar" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
+    </div>
+
+    <!-- 周规律 -->
+    <h3 data-zh="📆 周规律" data-mix="📆 周规律" data-en="📆 Weekly Pattern">📆 周规律</h3>
+    <div id="stats-weekday" style="background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1rem;"></div>
   </div>
 
   <footer>
@@ -2344,8 +2478,8 @@ function exportTomatoPotato() {
     // 按钮显示下一个语言名称
     const idx = langCycle.indexOf(currentLang);
     const nextLang = langCycle[(idx + 1) % langCycle.length];
-    
-    
+
+
     const labelMap = {
       zh: '🌐 中文',//这样能与“下一个”语言一致
       mix: '🌐 中+En',
@@ -2381,15 +2515,159 @@ function exportTomatoPotato() {
 
   <script>
     // === 统计功能 ===
-    let currentStatsRange = 7; // 默认7天
-    
+    let currentStatsRange = 7;
+
+    const STATS_SPLIT_TAG_DURATION_KEY = 'stats_split_multi_tag_duration_v1';
+
+    function getStatsSplitMultiTagDuration() {
+      return localStorage.getItem(STATS_SPLIT_TAG_DURATION_KEY) === '1';
+    }
+
+    function setStatsSplitMultiTagDuration(enabled) {
+      localStorage.setItem(STATS_SPLIT_TAG_DURATION_KEY, enabled ? '1' : '0');
+      renderStats();
+    }
+
+    // 统计颜色配置
+    const STATS_COLORS = [
+      '#7da7ff', '#ffb164', '#c49cff', '#7dd3a8',
+      '#f38f80', '#8fd3ff', '#ffd166', '#b8e986'
+    ];
+
+    function getStableTagColor(tag) {
+      let hash = 0;
+      for (const ch of String(tag)) {
+        hash = ((hash << 5) - hash) + ch.charCodeAt(0);
+      }
+      return STATS_COLORS[Math.abs(hash) % STATS_COLORS.length];
+    }
+
+    function formatLocalDayKey(timestamp) {
+      const d = new Date(timestamp);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function getWeekdayFromDayKey(dayKey) {
+      const [year, month, day] = dayKey.split('-').map(Number);
+      return new Date(year, month - 1, day).getDay();
+    }
+
+    function splitTimeRangeByLocalDay(startMs, endMs) {
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return [];
+      }
+
+      const segments = [];
+      let cursor = startMs;
+
+      while (cursor < endMs) {
+        const d = new Date(cursor);
+        const nextMidnight = new Date(
+          d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0
+        ).getTime();
+
+        const segEnd = Math.min(endMs, nextMidnight);
+        const dayKey = formatLocalDayKey(cursor);
+
+        segments.push({
+          dayKey,
+          weekday: new Date(cursor).getDay(),
+          durationMs: segEnd - cursor
+        });
+
+        cursor = segEnd;
+      }
+
+      return segments;
+    }
+
+    function buildStatsDataset(records, rangeDays, options = {}) {
+      const now = Date.now();
+      const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
+      const splitMultiTagDuration = options.splitMultiTagDuration === true;
+
+      const statsRules = loadStatsRules();
+      const activeRecords = records.filter(r => !r.withdrawn && Number(r.endTime) > cutoff);
+
+      let totalDurationMs = 0;
+      let totalTagDurationMs = 0;
+      const tagStats = {};
+      const dailyStats = {};
+      const dailyTagStats = {};
+      const weekdayStats = {};
+
+      activeRecords.forEach(record => {
+        const endMs = Number(record.endTime);
+        const durationMs = Math.max(0, Number(record.durationMs) || 0);
+        const startMs = endMs - durationMs;
+
+        const clippedStartMs = Math.max(startMs, cutoff);
+        const clippedEndMs = Math.min(endMs, now);
+
+        if (clippedEndMs <= clippedStartMs) return;
+
+        const segments = splitTimeRangeByLocalDay(clippedStartMs, clippedEndMs);
+
+        const statsTags = getStatsTagsForRecord(record, statsRules) || [];
+        const tags = statsTags.length ? statsTags : ['#未分类'];
+
+        segments.forEach(seg => {
+          totalDurationMs += seg.durationMs;
+
+          // 每日统计
+          if (!dailyStats[seg.dayKey]) dailyStats[seg.dayKey] = 0;
+          dailyStats[seg.dayKey] += seg.durationMs;
+
+          // 每日标签统计
+          if (!dailyTagStats[seg.dayKey]) dailyTagStats[seg.dayKey] = {};
+
+          // 标签统计
+          const perTagDuration = splitMultiTagDuration
+            ? seg.durationMs / tags.length
+            : seg.durationMs;
+          tags.forEach(tag => {
+            if (!tagStats[tag]) tagStats[tag] = { recordCount: 0, duration: 0 };
+            if (!dailyTagStats[seg.dayKey][tag]) dailyTagStats[seg.dayKey][tag] = 0;
+
+            tagStats[tag].duration += perTagDuration;
+            dailyTagStats[seg.dayKey][tag] += perTagDuration;
+            totalTagDurationMs += perTagDuration;
+          });
+        });
+
+        // recordCount：每条记录每个标签只加一次
+        tags.forEach(tag => {
+          if (!tagStats[tag]) tagStats[tag] = { recordCount: 0, duration: 0 };
+          tagStats[tag].recordCount++;
+        });
+      });
+
+      // 周规律统计：每日总时长再按星期几聚合
+      Object.entries(dailyStats).forEach(([dayKey, dayDuration]) => {
+        const weekday = getWeekdayFromDayKey(dayKey);
+        if (!weekdayStats[weekday]) weekdayStats[weekday] = { totalMs: 0, dayCount: 0 };
+        weekdayStats[weekday].totalMs += dayDuration;
+        weekdayStats[weekday].dayCount++;
+      });
+
+      return {
+        activeRecords,
+        totalDurationMs,
+        totalTagDurationMs,
+        tagStats,
+        dailyStats,
+        dailyTagStats,
+        weekdayStats
+      };
+    }
+
     function switchStatsRange(days) {
       currentStatsRange = days;
       // 更新按钮状态
       document.querySelectorAll('[id^="range-"]').forEach(btn => btn.style.fontWeight = 'normal');
       const activeBtn = document.getElementById(`range-${days}-btn`);
       if (activeBtn) activeBtn.style.fontWeight = 'bold';
-      
+
       renderStats();
     }
 
@@ -2473,47 +2751,26 @@ function exportTomatoPotato() {
       if (parsedTags.length) return parsedTags;
       return splitStatsTags(record.tag || '');
     }
-    
+
     function renderStats() {
-      const now = Date.now();
-      const cutoff = now - (currentStatsRange * 24 * 60 * 60 * 1000);
-      
-      // 筛选未撤回的记录，并在统计页临时按解析规则推导标签。
-      // Filter active records and derive stats-only tags from memo parsing rules.
-      const statsRules = loadStatsRules();
-      const validRecords = intervals
-        .filter(r => !r.withdrawn && Number(r.endTime) > cutoff)
-        .map(r => ({
-          ...r,
-          statsTags: getStatsTagsForRecord(r, statsRules)
-        }));
-      
-      // 计算基础汇总
-      const totalRecords = validRecords.length;
-      const totalDurationMs = validRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+      const splitMultiTag = getStatsSplitMultiTagDuration();
+      const dataset = buildStatsDataset(intervals, currentStatsRange, { splitMultiTagDuration: splitMultiTag });
+      const { activeRecords, totalDurationMs, totalTagDurationMs, tagStats, dailyStats, dailyTagStats, weekdayStats } = dataset;
+
+      const totalRecords = activeRecords.length;
       const avgDurationMs = totalRecords ? totalDurationMs / totalRecords : 0;
-      
-      // 统计标签
-      const tagStats = {};
-      validRecords.forEach(r => {
-        const tags = r.statsTags || [];
-        tags.forEach(t => {
-          if (!tagStats[t]) tagStats[t] = { count: 0, duration: 0 };
-          tagStats[t].count++;
-          tagStats[t].duration += r.durationMs || 0;
-        });
-      });
-      
+      const isSplit = totalTagDurationMs !== totalDurationMs;
+
       // 找最常见标签
       let mostCommonTag = '无';
       let maxCount = 0;
       for (const t in tagStats) {
-        if (tagStats[t].count > maxCount) {
-          maxCount = tagStats[t].count;
+        if (tagStats[t].recordCount > maxCount) {
+          maxCount = tagStats[t].recordCount;
           mostCommonTag = t;
         }
       }
-      
+
       // 渲染基础汇总
       const summaryEl = document.getElementById('stats-summary');
       summaryEl.innerHTML = `
@@ -2523,8 +2780,9 @@ function exportTomatoPotato() {
             <div style="font-size:1.8rem; font-weight:700;">${totalRecords}</div>
           </div>
           <div style="flex:1 1 200px;">
-            <div style="font-size:0.8rem; color:var(--muted);">总时长</div>
-            <div style="font-size:1.8rem; font-weight:700;">${formatDuration(totalDurationMs)}</div>
+            <div style="font-size:0.8rem; color:var(--muted);">${isSplit ? '标签归属合计' : '总时长'}</div>
+            <div style="font-size:1.8rem; font-weight:700;">${formatDuration(isSplit ? totalTagDurationMs : totalDurationMs)}</div>
+            ${isSplit ? `<div style="font-size:0.7rem; color:var(--muted);">含重叠 ${formatDuration(totalTagDurationMs - totalDurationMs)}</div>` : ''}
           </div>
           <div style="flex:1 1 200px;">
             <div style="font-size:0.8rem; color:var(--muted);">平均每条</div>
@@ -2535,28 +2793,31 @@ function exportTomatoPotato() {
             <div style="font-size:1.8rem; font-weight:700;">${mostCommonTag}</div>
           </div>
         </div>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:0.5rem;">
+          ${splitMultiTag ? '✓ 均摊模式：标签时长已均摊，一条多标签记录的时长会平均分配给各标签。' : '○ 未均摊模式：标签时长含重叠，一条多标签记录会完整计入每个标签。'}
+        </div>
       `;
-      
+
       // 渲染标签排行 - 按记录数
       const byCountEl = document.getElementById('stats-by-count');
-      const sortedByCount = Object.entries(tagStats).sort((a, b) => b[1].count - a[1].count);
+      const sortedByCount = Object.entries(tagStats).sort((a, b) => b[1].recordCount - a[1].recordCount);
       byCountEl.innerHTML = `<h4 style="margin-top:0;">按记录数</h4>` + (
         sortedByCount.length
-          ? sortedByCount.map(([tag, s]) => 
+          ? sortedByCount.map(([tag, s]) =>
             `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
               <span>${tag}</span>
-              <span style="font-weight:700;">${s.count}条</span>
+              <span style="font-weight:700;">${s.recordCount}条</span>
             </div>`
           ).join('')
           : '<div style="color:var(--muted);">暂无标签数据</div>'
       );
-      
+
       // 渲染标签排行 - 按时长
       const byDurationEl = document.getElementById('stats-by-duration');
       const sortedByDuration = Object.entries(tagStats).sort((a, b) => b[1].duration - a[1].duration);
-      byDurationEl.innerHTML = `<h4 style="margin-top:0;">按时长</h4>` + (
+      byDurationEl.innerHTML = `<h4 style="margin-top:0;">标签时长排行${isSplit ? '（已均摊）' : '（含重叠）'}</h4>` + (
         sortedByDuration.length
-          ? sortedByDuration.map(([tag, s]) => 
+          ? sortedByDuration.map(([tag, s]) =>
             `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
               <span>${tag}</span>
               <span style="font-weight:700;">${formatDuration(s.duration)}</span>
@@ -2564,26 +2825,220 @@ function exportTomatoPotato() {
           ).join('')
           : '<div style="color:var(--muted);">暂无标签数据</div>'
       );
-      
+
       // 渲染每日时长
-      const dailyStats = {};
-      validRecords.forEach(r => {
-        const d = new Date(r.endTime);
-        const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dailyStats[key]) dailyStats[key] = 0;
-        dailyStats[key] += r.durationMs || 0;
-      });
-      
       const dailyEl = document.getElementById('stats-daily');
       const sortedDays = Object.keys(dailyStats).sort().reverse();
-      dailyEl.innerHTML = sortedDays.map(day => 
-        `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
+      dailyEl.innerHTML = sortedDays.map(day => {
+        const realDuration = dailyStats[day];
+        const tagDuration = Object.values(dailyTagStats[day] || {}).reduce((s, v) => s + v, 0);
+        const hasOverlap = Math.abs(tagDuration - realDuration) > 1000;
+        return `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
           <span>${day}</span>
-          <span style="font-weight:700;">${formatDuration(dailyStats[day])}</span>
-        </div>`
-      ).join('') || '<div style="color:var(--muted);">暂无数据</div>';
+          <span style="font-weight:700;">${hasOverlap ? `${formatDuration(tagDuration)}（真实${formatDuration(realDuration)}）` : formatDuration(realDuration)}</span>
+        </div>`;
+      }).join('') || '<div style="color:var(--muted);">暂无数据</div>';
+
+      // 渲染饼图
+      renderPieChart(tagStats, sortedByDuration, splitMultiTag);
+
+      // 渲染柱状图
+      renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag);
+
+      // 渲染周规律
+      renderWeekdayStats(weekdayStats);
     }
-    
+
+    function renderPieChart(tagStats, sortedByDuration, splitMultiTag) {
+      const pieEl = document.getElementById('stats-pie');
+
+      if (sortedByDuration.length === 0) {
+        pieEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+        return;
+      }
+
+      const total = sortedByDuration.reduce((sum, [, s]) => sum + s.duration, 0);
+      if (total === 0) {
+        pieEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+        return;
+      }
+
+      // 合并超过8个标签为"其他"
+      let displayTags;
+      if (sortedByDuration.length > 8) {
+        const top7 = sortedByDuration.slice(0, 7);
+        const othersDur = sortedByDuration.slice(7).reduce((sum, [, s]) => sum + s.duration, 0);
+        displayTags = [...top7, ['#其他', { duration: othersDur }]];
+      } else {
+        displayTags = sortedByDuration;
+      }
+
+      const size = 180;
+      const cx = size / 2;
+      const cy = size / 2;
+      const radius = 70;
+
+      let svgContent = '';
+      if (displayTags.length === 1) {
+        const tag = displayTags[0][0];
+        const color = getStableTagColor(tag);
+        svgContent = `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${color}" />`;
+      } else {
+        let startAngle = -90;
+        displayTags.forEach(([tag, s]) => {
+          const ratio = s.duration / total;
+          const angle = ratio * 360;
+          const endAngle = startAngle + angle;
+
+          if (angle > 0.01) {
+            const x1 = cx + radius * Math.cos((startAngle * Math.PI) / 180);
+            const y1 = cy + radius * Math.sin((startAngle * Math.PI) / 180);
+            const x2 = cx + radius * Math.cos((endAngle * Math.PI) / 180);
+            const y2 = cy + radius * Math.sin((endAngle * Math.PI) / 180);
+            const largeArc = angle > 180 ? 1 : 0;
+            const d = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+            const color = getStableTagColor(tag);
+            svgContent += `<path d="${d}" fill="${color}" />`;
+          }
+          startAngle = endAngle;
+        });
+      }
+
+      const legend = displayTags.map(([tag, s]) => {
+        const pct = Math.round((s.duration / total) * 100);
+        const color = getStableTagColor(tag);
+        return `<div style="display:flex; align-items:center; gap:0.5rem; padding:0.2rem 0;">
+          <span style="width:12px; height:12px; background:${color}; border-radius:2px;"></span>
+          <span style="flex:1;">${tag}</span>
+          <span style="color:var(--muted);">${pct}%</span>
+        </div>`;
+      }).join('');
+
+      pieEl.innerHTML = `
+        <h4 style="margin-top:0;">标签${splitMultiTag ? '时间' : '归属'}占比${splitMultiTag ? '（已均摊）' : '（含重叠）'}</h4>
+        <div style="display:flex; gap:1rem; align-items:flex-start;">
+          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+            ${svgContent}
+          </svg>
+          <div style="flex:1; font-size:0.85rem;">${legend}</div>
+        </div>
+        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.25rem;">
+          ${splitMultiTag ? '每段时长已平均分配给标签' : '每段时长完整计入各标签'}
+        </div>
+      `;
+    }
+
+    function renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag) {
+      const barEl = document.getElementById('stats-bar');
+      const days = sortedDays.slice(0, 14).reverse();
+
+      if (days.length === 0) {
+        barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+        return;
+      }
+
+      // 收集所有标签
+      const allTags = new Set();
+      days.forEach(day => {
+        if (dailyTagStats[day]) {
+          Object.keys(dailyTagStats[day]).forEach(t => allTags.add(t));
+        }
+      });
+      const tagList = Array.from(allTags);
+
+      if (tagList.length === 0) {
+        barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+        return;
+      }
+
+      // 找出每天最大时长用于计算高度
+      let maxDayTotal = 0;
+      days.forEach(day => {
+        const dayTotal = dailyTagStats[day]
+          ? Object.values(dailyTagStats[day]).reduce((s, v) => s + v, 0)
+          : 0;
+        if (dayTotal > maxDayTotal) maxDayTotal = dayTotal;
+      });
+
+      const barHeight = 120;
+      const barWidth = Math.max(20, Math.min(60, (barEl.clientWidth || 400) / days.length - 8));
+
+      const bars = days.map(day => {
+        const dayTags = dailyTagStats[day] || {};
+
+        let y = 0;
+        const segments = tagList.map(tag => {
+          const tagDur = dayTags[tag] || 0;
+          if (tagDur === 0) return '';
+          const segHeight = (tagDur / maxDayTotal) * barHeight;
+          const color = getStableTagColor(tag);
+          const seg = `<div style="position:absolute; bottom:${y}px; width:100%; height:${segHeight}px; background:${color}; border-radius:2px 2px 0 0;"></div>`;
+          y += segHeight;
+          return seg;
+        }).join('');
+
+        return `<div style="position:relative; width:${barWidth}px; height:${barHeight}px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;">
+          ${segments}
+          <div style="font-size:0.65rem; color:var(--muted); margin-top:4px;">${day.slice(5)}</div>
+        </div>`;
+      }).join('');
+
+      const legend = tagList.map(tag => {
+        const color = getStableTagColor(tag);
+        return `<div style="display:flex; align-items:center; gap:0.3rem;">
+          <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
+          <span style="font-size:0.75rem;">${tag}</span>
+        </div>`;
+      }).join('');
+
+      barEl.innerHTML = `
+        <h4 style="margin-top:0;">每日标签${splitMultiTag ? '时长分布' : '归属时长'}${splitMultiTag ? '（已均摊）' : '（含重叠）'}</h4>
+        <div style="overflow-x:auto; padding-bottom:0.5rem;">
+          <div style="display:flex; gap:4px; align-items:flex-end; min-width:min-content;">
+            ${bars}
+          </div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem; font-size:0.75rem;">
+          ${legend}
+        </div>
+        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.25rem;">
+          ${splitMultiTag ? '各段时长已平均分配' : '各标签时长完整计入，柱子总和可能超过当天真实总时长'}
+        </div>
+      `;
+    }
+
+    function renderWeekdayStats(weekdayStats) {
+      const weekdayEl = document.getElementById('stats-weekday');
+      const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+      let maxDuration = 0;
+      for (const wd in weekdayStats) {
+        if (weekdayStats[wd].totalMs > maxDuration) {
+          maxDuration = weekdayStats[wd].totalMs;
+        }
+      }
+
+      const bars = weekdayNames.map((name, i) => {
+        const stat = weekdayStats[i] || { totalMs: 0, dayCount: 0 };
+        const ratio = maxDuration > 0 ? stat.totalMs / maxDuration : 0;
+        const barWidth = Math.round(ratio * 100);
+        const avgMs = stat.dayCount > 0 ? Math.round(stat.totalMs / stat.dayCount) : 0;
+        return `<div style="display:flex; align-items:center; gap:0.5rem;">
+          <span style="width:2rem; text-align:right; font-size:0.8rem;">${name.slice(1)}</span>
+          <div style="flex:1; height:20px; background:var(--bg-secondary); border-radius:3px; overflow:hidden;">
+            <div style="width:${barWidth}%; height:100%; background:var(--primary); border-radius:3px; transition:width 0.3s;"></div>
+          </div>
+          <span style="width:4rem; font-size:0.8rem; text-align:right;" title="共${stat.dayCount}天">${formatDuration(avgMs)}</span>
+        </div>`;
+      }).join('');
+
+      weekdayEl.innerHTML = `
+        <h4 style="margin-top:0;">周规律（每天平均）</h4>
+        ${bars}
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:0.5rem;">每日总时长÷天数，悬停显示天数</div>
+      `;
+    }
+
     function formatDuration(ms) {
       if (!ms) return '0分钟';
       const totalMinutes = Math.round(ms / 60000);
@@ -2592,7 +3047,7 @@ function exportTomatoPotato() {
       const mins = totalMinutes % 60;
       return mins ? `${hours}小时${mins}分钟` : `${hours}小时`;
     }
-    
+
     // 页面加载时初始化统计
     document.addEventListener('DOMContentLoaded', () => {
       // 在 showTab 函数中添加对 tab-stats 的处理
@@ -2600,10 +3055,11 @@ function exportTomatoPotato() {
       window.showTab = function(id) {
         originalShowTab(id);
         if (id === 'tab-stats') {
+          document.getElementById('stats-split-toggle').checked = getStatsSplitMultiTagDuration();
           renderStats();
         }
       };
-      
+
       // 初始化按钮状态
       updateUndoRedoButtons();
     });
