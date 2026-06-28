@@ -526,9 +526,23 @@ function updateAdvancedModeUI() {
     exportTabBtn.style.display = isAdvancedMode ? '' : 'none';
   }
 
+  const exportCatTabBtn = document.getElementById('tab-export-cat-btn');
+  if (exportCatTabBtn) {
+    exportCatTabBtn.style.display = isAdvancedMode ? '' : 'none';
+  }
+
+  const importBtn = document.getElementById('import-records-btn');
+  if (importBtn) {
+    importBtn.style.display = isAdvancedMode ? '' : 'none';
+  }
+
   if (!isAdvancedMode) {
     const exportTab = document.getElementById('tab-export');
     if (exportTab && exportTab.style.display !== 'none') {
+      showTab('tab-log');
+    }
+    const exportCatTab = document.getElementById('tab-export-cat');
+    if (exportCatTab && exportCatTab.style.display !== 'none') {
       showTab('tab-log');
     }
   }
@@ -1714,118 +1728,214 @@ function undoClearRules() {
   }
 }
 
-function importMockData() {
-  if (!confirm('这将添加测试数据用于统计功能验证。是否继续？')) {
-    return;
-  }
+let currentImportMode = null;
 
+function openImportDialog() {
+  const dialog = document.getElementById('import-dialog');
+  const message = document.getElementById('import-message');
+  const warnings = document.getElementById('import-warnings');
+
+  message.innerHTML = '导入记录可能改变当前记录列表。建议先导出当前记录作为备份。';
+  warnings.innerHTML = '⚠️ 混合导入可能导致同一时间段多条记录或重复记录。';
+
+  dialog.style.display = 'block';
+  currentImportMode = null;
+}
+
+function closeImportDialog() {
+  const dialog = document.getElementById('import-dialog');
+  dialog.style.display = 'none';
+  document.getElementById('import-file-input').value = '';
+}
+
+function startImport(mode) {
+  currentImportMode = mode;
+  const fileInput = document.getElementById('import-file-input');
+  fileInput.click();
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      let imported;
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const parsed = JSON.parse(e.target.result);
+        // 支持 { intervals: [...] } 格式或直接数组格式
+        if (Array.isArray(parsed)) {
+          imported = parsed;
+        } else if (parsed && Array.isArray(parsed.intervals)) {
+          imported = parsed.intervals;
+        } else {
+          throw new Error('JSON格式不支持，请提供包含intervals数组的JSON文件');
+        }
+      } else {
+        imported = parseCSV(e.target.result);
+      }
+      
+      imported = normalizeImportedIntervals(imported);
+      applyImport(imported, currentImportMode);
+    } catch (err) {
+      alert('导入失败：' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  closeImportDialog();
+}
+
+function getRecordStartMs(record) {
+  return Number(record.endTime) - (Number(record.durationMs) || 0);
+}
+
+function normalizeImportedIntervals(imported) {
   const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const hourMs = 60 * 60 * 1000;
-  const minMs = 60 * 1000;
-  const mockRecords = [];
-
-  const tags = ['#工作', '#学习', '#运动', '#休息', '#娱乐'];
-  const memos = ['完成报告', '阅读书籍', '跑步30分钟', '看剧放松', '写代码'];
-
-  // === 固定测试样例 ===
-
-  // 1. 跨零点：昨天23:30 - 今天00:30（2小时）
-  const yesterday = new Date(now - dayMs);
-  const yesterday23_30 = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 30, 0).getTime();
-  mockRecords.push({
-    startTime: yesterday23_30,
-    endTime: yesterday23_30 + 2 * hourMs,
-    durationMs: 2 * hourMs,
-    tag: '#工作',
-    memo: '加班到凌晨',
-    withdrawn: false
+  return imported.map((r, idx) => {
+    const normalized = { ...r };
+    if (!normalized.id) normalized.id = 'imported_' + now + '_' + idx;
+    if (!('withdrawn' in normalized)) normalized.withdrawn = false;
+    if (!('parsed' in normalized)) normalized.parsed = false;
+    if (!('setDuration' in normalized)) normalized.setDuration = '';
+    if (!('withdrawnAt' in normalized)) normalized.withdrawnAt = 0;
+    if (!normalized.duration && normalized.durationMs) {
+      normalized.duration = formatDuration(normalized.durationMs);
+    }
+    return normalized;
   });
+}
 
-  // 2. 跨多天：第3天23:00 - 第5天01:00（2天2小时）
-  const day3 = new Date(now - 3 * dayMs);
-  const day3_23_00 = new Date(day3.getFullYear(), day3.getMonth(), day3.getDate(), 23, 0, 0).getTime();
-  mockRecords.push({
-    startTime: day3_23_00,
-    endTime: day3_23_00 + 2 * dayMs + hourMs,
-    durationMs: 2 * dayMs + hourMs,
-    tag: '#工作',
-    memo: '项目冲刺',
-    withdrawn: false
-  });
-
-  // 3. 多标签记录：#工作 #学习
-  const todayStart = new Date();
-  todayStart.setHours(9, 0, 0, 0);
-  mockRecords.push({
-    startTime: todayStart.getTime(),
-    endTime: todayStart.getTime() + 90 * minMs,
-    durationMs: 90 * minMs,
-    tag: '#工作 #学习',
-    memo: '技术分享',
-    withdrawn: false
-  });
-
-  // 4. 无标签记录（应进入 #未分类）
-  mockRecords.push({
-    startTime: todayStart.getTime() + 3 * hourMs,
-    endTime: todayStart.getTime() + 4 * hourMs,
-    durationMs: hourMs,
-    tag: '',
-    memo: '无标签记录',
-    withdrawn: false
-  });
-
-  // 5. withdrawn 记录（不应参与统计）
-  mockRecords.push({
-    startTime: todayStart.getTime() + 5 * hourMs,
-    endTime: todayStart.getTime() + 6 * hourMs,
-    durationMs: hourMs,
-    tag: '#休息',
-    memo: '这条被撤回了',
-    withdrawn: true
-  });
-
-  // 6. memo可被ruleTable解析但原tag为空（假设有"报告"关键词匹配#工作）
-  mockRecords.push({
-    startTime: todayStart.getTime() + 7 * hourMs,
-    endTime: todayStart.getTime() + 8 * hourMs,
-    durationMs: hourMs,
-    tag: '',
-    memo: '写报告',
-    withdrawn: false
-  });
-
-  // === 随机测试数据（7天，每天3-6条）===
-  for (let d = 0; d < 7; d++) {
-    const dayStart = now - (d * dayMs);
-    const recordsPerDay = 3 + Math.floor(Math.random() * 4);
-
-    for (let r = 0; r < recordsPerDay; r++) {
-      const startOffset = (r * dayMs / recordsPerDay) + (Math.random() * 2 * hourMs);
-      const duration = (30 + Math.random() * 120) * minMs;
-
-      const tagIdx = Math.floor(Math.random() * tags.length);
-      const memoIdx = Math.floor(Math.random() * memos.length);
-
-      mockRecords.push({
-        startTime: dayStart + startOffset,
-        endTime: dayStart + startOffset + duration,
-        durationMs: duration,
-        tag: tags[tagIdx],
-        memo: memos[memoIdx],
-        withdrawn: false
-      });
+function applyImport(imported, mode) {
+  if (mode === 'replace') {
+    const backupTime = exportBackupCSVNoClear();
+    if (!backupTime) {
+      alert('导出备份失败，导入已取消');
+      return;
     }
   }
 
-  const existingIntervals = JSON.parse(localStorage.getItem('intervals') || '[]');
-  const combined = [...existingIntervals, ...mockRecords];
-  localStorage.setItem('intervals', JSON.stringify(combined));
-  intervals = combined;
+  if (mode === 'replace') {
+    intervals = imported;
+    undoStack = [];
+    redoStack = [];
+  } else {
+    const merged = [...intervals, ...imported];
+    merged.sort((a, b) => getRecordStartMs(a) - getRecordStartMs(b));
+    intervals = merged;
+  }
 
+  localStorage.setItem('intervals', JSON.stringify(intervals));
+  localStorage.setItem('undoStack', JSON.stringify(undoStack));
+  localStorage.setItem('redoStack', JSON.stringify(redoStack));
   renderIntervals();
-  showNotification(`已添加 ${mockRecords.length} 条测试数据（6个边界样例 + ${mockRecords.length - 6}条随机）`);
+  const statsTab = document.getElementById('tab-stats');
+  if (statsTab && statsTab.style.display !== 'none') {
+    renderStats();
+  }
+  showNotification(`导入成功，共 ${imported.length} 条记录`);
+}
+
+function parseCSV(csvText) {
+  const lines = csvText.trim().split('\n');
+  if (lines.length < 2) throw new Error('CSV文件为空');
+
+  const headerLine = lines[0];
+  const headers = parseCSVLine(headerLine);
+  
+  // 同时支持中英文表头
+  const memoIdx = headers.indexOf('memo') >= 0 ? headers.indexOf('memo') : headers.indexOf('备注');
+  const tagIdx = headers.indexOf('tag') >= 0 ? headers.indexOf('tag') : headers.indexOf('标签');
+  const durationIdx = headers.indexOf('duration') >= 0 ? headers.indexOf('duration') : headers.indexOf('格式化时间');
+  const durationMsIdx = headers.indexOf('durationMs') >= 0 ? headers.indexOf('durationMs') : headers.indexOf('持续时间毫秒');
+  const endTimeIdx = headers.indexOf('endTime') >= 0 ? headers.indexOf('endTime') : headers.indexOf('结束时间戳');
+  const setDurationIdx = headers.indexOf('setDuration') >= 0 ? headers.indexOf('setDuration') : headers.indexOf('指定持续时间（分钟）');
+  const withdrawnIdx = headers.indexOf('withdrawn') >= 0 ? headers.indexOf('withdrawn') : headers.indexOf('状态');
+  const withdrawnAtIdx = headers.indexOf('withdrawnAt') >= 0 ? headers.indexOf('withdrawnAt') : -1;
+  const parsedIdx = headers.indexOf('parsed') >= 0 ? headers.indexOf('parsed') : headers.indexOf('已解析');
+  
+  const records = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    if (cols.length < 3) continue;
+
+    // 状态字段转换：从中文“已撤回”到 boolean
+    let withdrawn = false;
+    if (withdrawnIdx >= 0) {
+      const v = cols[withdrawnIdx];
+      withdrawn = (v === 'true' || v === '已撤回');
+    }
+
+    const record = {
+      memo: (memoIdx >= 0 ? cols[memoIdx] : '') || '',
+      tag: (tagIdx >= 0 ? cols[tagIdx] : '') || '',
+      duration: (durationIdx >= 0 ? cols[durationIdx] : '') || '',
+      durationMs: durationMsIdx >= 0 ? Number(cols[durationMsIdx]) : 0,
+      endTime: endTimeIdx >= 0 ? Number(cols[endTimeIdx]) : Date.now(),
+      setDuration: (setDurationIdx >= 0 ? cols[setDurationIdx] : '') || '',
+      withdrawn: withdrawn,
+      withdrawnAt: withdrawnAtIdx >= 0 ? Number(cols[withdrawnAtIdx]) : 0,
+      parsed: parsedIdx >= 0 ? (cols[parsedIdx] === 'true' || cols[parsedIdx] === '1') : false,
+      id: 'imported_' + Date.now() + '_' + i
+    };
+
+    if (record.durationMs === 0 && record.duration) {
+      record.durationMs = parseDurationStringToMs(record.duration);
+    }
+
+    // 校验必要字段
+    if (!record.endTime || record.endTime <= 0) {
+      record.endTime = Date.now();
+    }
+    if (!record.durationMs || record.durationMs <= 0) {
+      record.durationMs = 0;
+    }
+
+    records.push(record);
+  }
+
+  return records;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function parseDurationStringToMs(s) {
+  const parts = s.split(':');
+  if (parts.length === 3) {
+    const h = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    const sPart = parseFloat(parts[2]);
+    return h * 3600000 + m * 60000 + sPart * 1000;
+  } else if (parts.length === 2) {
+    const m = parseInt(parts[0]);
+    const sPart = parseFloat(parts[1]);
+    return m * 60000 + sPart * 1000;
+  }
+  return 0;
 }
 
 function clearRuleTable() {
@@ -2024,6 +2134,260 @@ function exportTomatoPotato() {
   navigator.clipboard.writeText(output);
   alert('已复制到剪贴板');
 }
+
+// === 选定类别日志导出功能 ===
+// 内存中的导出备注状态（页面刷新前有效）
+let catExportNotes = {}; // { itemId: string }
+let catExportSelectedTags = new Set(); // 选中的标签集合
+
+function getAllTagsFromIntervals() {
+  const tagSet = new Set();
+  intervals.forEach(item => {
+    if (item.withdrawn) return;
+    const tagText = item.tag || '';
+    const tags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+    tags.forEach(t => tagSet.add(t));
+  });
+  return Array.from(tagSet).sort();
+}
+
+function catExportGetItemDuration(item) {
+  // 优先使用 setDuration（手动指定时间）
+  if (item.setDuration && String(item.setDuration).trim() !== '') {
+    const sd = String(item.setDuration).trim();
+    // 支持 "15+1" 格式
+    const parts = sd.match(/^(\d+)(?:\+(\d+))?$/);
+    if (parts) {
+      const base = parseInt(parts[1], 10);
+      const extra = parts[2] ? parseInt(parts[2], 10) : 0;
+      return base + extra;
+    }
+    const n = parseFloat(sd);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  // 否则使用自动计算的 durationMs
+  const ms = Number(item.durationMs) || 0;
+  return Math.round(ms / 60000);
+}
+
+function catExportBuildLine(item, prevDateStr) {
+  const endMs = Number(item.endTime) || 0;
+  const d = new Date(endMs);
+  const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const dateStr = `${d.toLocaleString(undefined, {month:'short'}).replace('.','')} ${d.getDate()}, ${d.getFullYear()}`;
+  const datePrefix = (prevDateStr !== dateStr) ? `${timeStr}, ${dateStr}；` : `${timeStr}；`;
+
+  // 提取标签前缀
+  const tagText = item.tag || '';
+  const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+  // 取第一个标签作为导出前缀的键
+  const primaryTag = itemTags[0] || '';
+  const prefixKey = primaryTag.replace(/^#/, '');
+  const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+
+  const mins = catExportGetItemDuration(item);
+  const memo = item.memo || '';
+  const note = catExportNotes[item.id] || '';
+
+  const body = memo;
+  const minsText = `花了${mins}分钟`;
+  let line = `${datePrefix}${prefix}${minsText}${body ? ' ' + body : ''}`;
+  if (note) {
+    line += '；' + note;
+  }
+
+  return { line, dateStr };
+}
+
+function catExportGenerate() {
+  const activeItems = intervals.filter(item => !item.withdrawn);
+  if (!catExportSelectedTags.size) {
+    return { text: '', html: '' };
+  }
+
+  // 过滤出包含任一选中标签的记录，并按结束时间升序排列
+  const filtered = activeItems
+    .filter(item => {
+      const tagText = item.tag || '';
+      const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+      return itemTags.some(t => catExportSelectedTags.has(t));
+    })
+    .sort((a, b) => Number(a.endTime) - Number(b.endTime));
+
+  if (!filtered.length) {
+    return { text: '', html: '' };
+  }
+
+  let prevDateStr = '';
+  const lines = [];
+  const htmlLines = [];
+
+  filtered.forEach(item => {
+    const { line, dateStr } = catExportBuildLine(item, prevDateStr);
+    lines.push(line);
+    // 富文本版：在 preview 中用 <strong> 包裹 "花了XX分钟"
+    const endMs = Number(item.endTime) || 0;
+    const d = new Date(endMs);
+    const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const datePrefix = (prevDateStr !== dateStr) ? `${timeStr}, ${dateStr}；` : `${timeStr}；`;
+    const tagText = item.tag || '';
+    const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+    const primaryTag = itemTags[0] || '';
+    const prefixKey = primaryTag.replace(/^#/, '');
+    const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+    const mins = catExportGetItemDuration(item);
+    const memo = item.memo || '';
+    const note = catExportNotes[item.id] || '';
+    const minsText = `花了${mins}分钟`;
+    let htmlLine = `${datePrefix}${prefix}<strong>${minsText}</strong>${memo ? ' ' + escapeHtml(memo) : ''}`;
+    if (note) {
+      htmlLine += '；' + escapeHtml(note);
+    }
+    htmlLines.push(htmlLine);
+    prevDateStr = dateStr;
+  });
+
+  return { text: lines.join('\n\n'), html: htmlLines.join('<br><br>') };
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function catExportRefresh() {
+  catExportNotes = {};
+  renderCatExportTab();
+}
+
+function catExportCopy() {
+  const { text } = catExportGenerate();
+  if (!text) {
+    alert('没有可导出的记录，请先选择标签。');
+    return;
+  }
+  navigator.clipboard.writeText(text).then(() => {
+    alert('已复制到剪贴板（纯文本）');
+  }).catch(() => {
+    alert('复制失败，请手动复制预览内容。');
+  });
+}
+
+function catExportCopyRich() {
+  const { html } = catExportGenerate();
+  if (!html) {
+    alert('没有可导出的记录，请先选择标签。');
+    return;
+  }
+  const richHtml = `<html><body style="white-space:pre-wrap;word-break:break-word;font-family:sans-serif;">${html}</body></html>`;
+  const blob = new Blob([richHtml], { type: 'text/html' });
+  const item = new ClipboardItem({ 'text/html': blob });
+  navigator.clipboard.write([item]).then(() => {
+    alert('已复制到剪贴板（富文本），可在支持富文本的编辑器中粘贴。');
+  }).catch(() => {
+    // fallback to plain text
+    catExportCopy();
+  });
+}
+
+function renderCatExportTab() {
+  // 渲染标签筛选器
+  const filterEl = document.getElementById('cat-export-tag-filter');
+  const allTags = getAllTagsFromIntervals();
+  if (!allTags.length) {
+    filterEl.innerHTML = '<span style="color:var(--muted);">暂无已解析的标签记录</span>';
+    document.getElementById('cat-export-event-list').innerHTML = '';
+    document.getElementById('cat-export-preview').innerHTML = '<span style="color:var(--muted);">无记录</span>';
+    return;
+  }
+
+  filterEl.innerHTML = '<strong style="margin-right:0.5rem;">标签筛选：</strong>' +
+    allTags.map(tag => {
+      const checked = catExportSelectedTags.has(tag) ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer;user-select:none;">
+        <input type="checkbox" value="${escapeHtml(tag)}" ${checked} onchange="catExportToggleTag(this)">
+        <span>${escapeHtml(tag)}</span>
+      </label>`;
+    }).join('');
+
+  // 渲染事件列表（表格编辑器样式）
+  const listEl = document.getElementById('cat-export-event-list');
+  const activeItems = intervals.filter(item => !item.withdrawn);
+  const filtered = activeItems
+    .filter(item => {
+      const tagText = item.tag || '';
+      const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+      return itemTags.some(t => catExportSelectedTags.has(t));
+    })
+    .sort((a, b) => Number(a.endTime) - Number(b.endTime));
+
+  if (!filtered.length) {
+    listEl.innerHTML = '<span style="color:var(--muted);">没有符合当前筛选条件的记录</span>';
+    document.getElementById('cat-export-preview').innerHTML = '<span style="color:var(--muted);">无记录</span>';
+    return;
+  }
+
+  listEl.innerHTML = '<table style="width:100%;border-collapse:collapse;">' +
+    '<tr style="background:var(--panel);">' +
+    '<th style="padding:0.3rem;border:1px solid var(--border);text-align:left;width:45%;">事件预览</th>' +
+    '<th style="padding:0.3rem;border:1px solid var(--border);text-align:left;width:55%;">备注 / 感慨</th>' +
+    '</tr>' +
+    filtered.map(item => {
+      const mins = catExportGetItemDuration(item);
+      const memo = item.memo || '';
+      const endMs = Number(item.endTime) || 0;
+      const d = new Date(endMs);
+      const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const tagText = item.tag || '';
+      const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
+      const primaryTag = itemTags[0] || '';
+      const prefixKey = primaryTag.replace(/^#/, '');
+      const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+      const noteVal = catExportNotes[item.id] || '';
+      return `<tr>
+        <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;color:var(--muted);">
+          ${timeStr} ${prefix}<strong>花了${mins}分钟</strong>${memo ? ' ' + escapeHtml(memo) : ''}
+        </td>
+        <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;">
+          <textarea rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.9rem;"
+            id="cat-note-${item.id}"
+            placeholder="添加备注或感慨..."
+            oninput="catExportSetNote('${item.id}', this.value)">${escapeHtml(noteVal)}</textarea>
+        </td>
+      </tr>`;
+    }).join('') +
+    '</table>';
+
+  // 更新预览
+  const { text, html } = catExportGenerate();
+  const previewEl = document.getElementById('cat-export-preview');
+  if (!text) {
+    previewEl.innerHTML = '<span style="color:var(--muted);">选择标签后即可预览导出内容</span>';
+  } else {
+    previewEl.innerHTML = html;
+  }
+}
+
+function catExportToggleTag(checkbox) {
+  const tag = checkbox.value;
+  if (checkbox.checked) {
+    catExportSelectedTags.add(tag);
+  } else {
+    catExportSelectedTags.delete(tag);
+  }
+  renderCatExportTab();
+}
+
+function catExportSetNote(itemId, value) {
+  catExportNotes[itemId] = value;
+  // 实时更新预览
+  const { html } = catExportGenerate();
+  const previewEl = document.getElementById('cat-export-preview');
+  if (html) {
+    previewEl.innerHTML = html;
+  }
+}
+
+// 初始化选定标签（首次打开时保持为空，由用户选择）
 
 </script>
   <style>
@@ -2247,6 +2611,7 @@ function exportTomatoPotato() {
     <button class="tab-button" onclick="showTab('tab-rules')" data-zh="定义备注解析规则" data-mix="定义Memo解析规则" data-en="Memo Parsing Rules">定义备注解析规则</button>
     <button class="tab-button" onclick="showTab('tab-log')" data-zh="运行日志和备份" data-mix="运行日志和备份" data-en="Log & Backups">运行日志和备份</button>
     <button id="tab-export-btn" class="tab-button" onclick="showTab('tab-export')" data-zh="番茄土豆格式导出" data-mix="番茄土豆格式导出" data-en="Tomato Export" style="display:none">番茄土豆格式导出</button>
+    <button id="tab-export-cat-btn" class="tab-button" onclick="showTab('tab-export-cat')" data-zh="📤 选定类别日志导出" data-mix="📤 选定类别日志导出" data-en="📤 Category Log Export" style="display:none">📤 选定类别日志导出</button>
     <button class="tab-button" onclick="showTab('tab-stats')" data-zh="📊 统计" data-mix="📊 统计" data-en="📊 Stats">📊 统计</button>
 
   </div>
@@ -2278,8 +2643,9 @@ function exportTomatoPotato() {
       <div class="control-row control-row-secondary">
         <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
         <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
-        <button onclick="importMockData()" data-zh="🧪 导入测试数据" data-mix="🧪 导入测试数据" data-en="🧪 Import Test Data">🧪 导入测试数据</button>
+        <button id="import-records-btn" onclick="openImportDialog()" data-zh="📥 导入记录" data-mix="📥 导入记录" data-en="📥 Import Records" style="display:none">📥 导入记录</button>
       </div>
+      <input type="file" id="import-file-input" style="display:none" accept=".csv,.json" onchange="handleFileSelect(event)">
     </section>
     <div id="interval-controls"></div>
 
@@ -2302,6 +2668,22 @@ function exportTomatoPotato() {
     <h2 data-zh="🍅 导出番茄土豆格式" data-mix="🍅 导出番茄土豆格式" data-en="🍅 Tomato Export">🍅 导出番茄土豆格式</h2>
     <button onclick="exportTomatoPotato()" data-zh="📋 生成并复制" data-mix="📋 生成并复制" data-en="📋 Generate & Copy">📋 生成并复制</button>
     <div id="tomato-output"></div>
+  </div>
+
+  <div id="tab-export-cat" class="tab-content" style="display:none">
+    <h2 data-zh="📤 选定类别日志导出" data-mix="📤 选定类别日志导出" data-en="📤 Category Log Export">📤 选定类别日志导出</h2>
+    <p style="color:var(--muted); font-size:0.9rem;" data-zh="筛选并导出指定类别的记录，支持添加备注后复制到日志。" data-mix="筛选并导出指定类别的记录，支持添加备注后复制到日志。" data-en="Filter and export records by selected categories, with notes support for copying to your journal.">筛选并导出指定类别的记录，支持添加备注后复制到日志。</p>
+
+    <div id="cat-export-tag-filter" style="margin:0.8rem 0; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
+
+    <div id="cat-export-event-list" style="margin-top:1rem;"></div>
+
+    <div style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <button onclick="catExportRefresh()" data-zh="🔄 刷新" data-mix="🔄 刷新" data-en="🔄 Refresh">🔄 刷新</button>
+      <button onclick="catExportCopy()" data-zh="📋 复制日志（纯文本）" data-mix="📋 复制日志（纯文本）" data-en="📋 Copy Log (Plain Text)">📋 复制日志（纯文本）</button>
+      <button onclick="catExportCopyRich()" data-zh="📋 复制日志（富文本）" data-mix="📋 复制日志（富文本）" data-en="📋 Copy Log (Rich Text)">📋 复制日志（富文本）</button>
+    </div>
+    <div id="cat-export-preview" style="margin-top:0.8rem; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:0.8rem; white-space:pre-wrap; word-break:break-word; max-height:60vh; overflow-y:auto;"></div>
   </div>
 
   <div id="tab-log" class="tab-content" style="display:none">
@@ -2392,6 +2774,17 @@ function exportTomatoPotato() {
     </div>
   </div>
 
+  <div id="import-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); border-radius:10px; position:fixed; top:22%; left:50%; transform:translateX(-50%); z-index:10002; width:min(95vw, 580px); box-shadow:var(--dialog-shadow);">
+    <h3 data-zh="📥 导入记录" data-mix="📥 导入记录" data-en="📥 Import Records">📥 导入记录</h3>
+    <p id="import-message" style="line-height:1.5;"></p>
+    <div id="import-warnings" style="margin-top:0.5rem; color:var(--muted); font-size:0.92rem;"></div>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:flex-end; margin-top:1rem;">
+      <button onclick="closeImportDialog()" data-zh="取消" data-mix="取消" data-en="Cancel">取消</button>
+      <button onclick="startImport('merge')" data-zh="混合导入" data-mix="混合导入" data-en="Merge Import">混合导入</button>
+      <button onclick="startImport('replace')" data-zh="先导出再替换" data-mix="先导出再替换" data-en="Export & Replace" style="font-weight:700;">先导出再替换</button>
+    </div>
+  </div>
+
   <!-- 统计页面 -->
   <div id="tab-stats" class="tab-content" style="display:none">
     <h2 data-zh="📊 统计回顾" data-mix="📊 统计回顾" data-en="📊 Stats Overview">📊 统计回顾</h2>
@@ -2409,7 +2802,12 @@ function exportTomatoPotato() {
     <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
       <button onclick="switchStatsRange(7)" id="range-7-btn" style="flex:1; min-width:80px; font-weight:bold;">最近 7 天</button>
       <button onclick="switchStatsRange(30)" id="range-30-btn" style="flex:1; min-width:80px;">最近 30 天</button>
+      <button onclick="switchStatsRange(90)" id="range-90-btn" style="flex:1; min-width:80px;">最近 90 天</button>
       <button onclick="switchStatsRange(365)" id="range-365-btn" style="flex:1; min-width:80px;">最近 365 天</button>
+    </div>
+
+    <!-- 性能提示 -->
+    <div id="stats-performance-warning" style="display:none; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:0.8rem; margin-bottom:1rem; font-size:0.92rem;">
     </div>
 
     <!-- 基础汇总 -->
@@ -2761,6 +3159,23 @@ function exportTomatoPotato() {
       const avgDurationMs = totalRecords ? totalDurationMs / totalRecords : 0;
       const isSplit = totalTagDurationMs !== totalDurationMs;
 
+      // 性能提示
+      const warningEl = document.getElementById('stats-performance-warning');
+      let warningText = '';
+      if (totalRecords >= 30000) {
+        warningText = '⚠️ 当前范围内记录较多（' + totalRecords + '条），建议导出CSV后用专业工具分析，性能可能较慢。';
+        warningEl.style.display = 'block';
+      } else if (totalRecords >= 10000) {
+        warningText = '⚠️ 当前范围内有 ' + totalRecords + '条记录，统计可能稍慢。';
+        warningEl.style.display = 'block';
+      } else if (totalRecords >= 5000) {
+        warningText = '当前范围内有 ' + totalRecords + '条记录。';
+        warningEl.style.display = 'block';
+      } else {
+        warningEl.style.display = 'none';
+      }
+      warningEl.innerHTML = warningText;
+
       // 找最常见标签
       let mostCommonTag = '无';
       let maxCount = 0;
@@ -2843,10 +3258,10 @@ function exportTomatoPotato() {
       renderPieChart(tagStats, sortedByDuration, splitMultiTag);
 
       // 渲染柱状图
-      renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag);
+      renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag, currentStatsRange);
 
       // 渲染周规律
-      renderWeekdayStats(weekdayStats);
+      renderWeekdayStats(weekdayStats, currentStatsRange);
     }
 
     function renderPieChart(tagStats, sortedByDuration, splitMultiTag) {
@@ -2928,86 +3343,164 @@ function exportTomatoPotato() {
       `;
     }
 
-    function renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag) {
+    function renderBarChart(dailyTagStats, sortedDays, dailyStats, splitMultiTag, currentStatsRange) {
       const barEl = document.getElementById('stats-bar');
-      const days = sortedDays.slice(0, 14).reverse();
 
-      if (days.length === 0) {
-        barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
-        return;
-      }
+      if (currentStatsRange === 365) {
+        // 365天：按月聚合
+        const monthlyStats = {};
+        sortedDays.forEach(day => {
+          const monthKey = day.substring(0, 7); // yyyy-mm
+          if (!monthlyStats[monthKey]) monthlyStats[monthKey] = {};
+          if (dailyTagStats[day]) {
+            for (const tag in dailyTagStats[day]) {
+              monthlyStats[monthKey][tag] = (monthlyStats[monthKey][tag] || 0) + dailyTagStats[day][tag];
+            }
+          }
+        });
+        const sortedMonths = Object.keys(monthlyStats).sort().reverse().slice(0, 12).reverse();
+        const allTags = new Set();
+        sortedMonths.forEach(month => {
+          Object.keys(monthlyStats[month]).forEach(t => allTags.add(t));
+        });
+        const tagList = Array.from(allTags);
 
-      // 收集所有标签
-      const allTags = new Set();
-      days.forEach(day => {
-        if (dailyTagStats[day]) {
-          Object.keys(dailyTagStats[day]).forEach(t => allTags.add(t));
+        if (tagList.length === 0 || sortedMonths.length === 0) {
+          barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+          return;
         }
-      });
-      const tagList = Array.from(allTags);
 
-      if (tagList.length === 0) {
-        barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
-        return;
-      }
+        let maxMonthTotal = 0;
+        sortedMonths.forEach(month => {
+          const total = Object.values(monthlyStats[month]).reduce((s, v) => s + v, 0);
+          if (total > maxMonthTotal) maxMonthTotal = total;
+        });
 
-      // 找出每天最大时长用于计算高度
-      let maxDayTotal = 0;
-      days.forEach(day => {
-        const dayTotal = dailyTagStats[day]
-          ? Object.values(dailyTagStats[day]).reduce((s, v) => s + v, 0)
-          : 0;
-        if (dayTotal > maxDayTotal) maxDayTotal = dayTotal;
-      });
+        const barHeight = 120;
+        const barWidth = Math.max(30, Math.min(70, (barEl.clientWidth || 400) / sortedMonths.length - 8));
 
-      const barHeight = 120;
-      const barWidth = Math.max(20, Math.min(60, (barEl.clientWidth || 400) / days.length - 8));
+        const bars = sortedMonths.map(month => {
+          const monthTags = monthlyStats[month];
+          let y = 0;
+          const segments = tagList.map(tag => {
+            const tagDur = monthTags[tag] || 0;
+            if (tagDur === 0) return '';
+            const segHeight = (tagDur / maxMonthTotal) * barHeight;
+            const color = getStableTagColor(tag);
+            const seg = `<div style="position:absolute; bottom:${y}px; width:100%; height:${segHeight}px; background:${color}; border-radius:2px 2px 0 0;"></div>`;
+            y += segHeight;
+            return seg;
+          }).join('');
 
-      const bars = days.map(day => {
-        const dayTags = dailyTagStats[day] || {};
-
-        let y = 0;
-        const segments = tagList.map(tag => {
-          const tagDur = dayTags[tag] || 0;
-          if (tagDur === 0) return '';
-          const segHeight = (tagDur / maxDayTotal) * barHeight;
-          const color = getStableTagColor(tag);
-          const seg = `<div style="position:absolute; bottom:${y}px; width:100%; height:${segHeight}px; background:${color}; border-radius:2px 2px 0 0;"></div>`;
-          y += segHeight;
-          return seg;
+          return `<div style="position:relative; width:${barWidth}px; height:${barHeight}px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;">
+            ${segments}
+            <div style="font-size:0.65rem; color:var(--muted); margin-top:4px;">${month.slice(5)}</div>
+          </div>`;
         }).join('');
 
-        return `<div style="position:relative; width:${barWidth}px; height:${barHeight}px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;">
-          ${segments}
-          <div style="font-size:0.65rem; color:var(--muted); margin-top:4px;">${day.slice(5)}</div>
-        </div>`;
-      }).join('');
+        const legend = tagList.map(tag => {
+          const color = getStableTagColor(tag);
+          return `<div style="display:flex; align-items:center; gap:0.3rem;">
+            <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
+            <span style="font-size:0.75rem;">${tag}</span>
+          </div>`;
+        }).join('');
 
-      const legend = tagList.map(tag => {
-        const color = getStableTagColor(tag);
-        return `<div style="display:flex; align-items:center; gap:0.3rem;">
-          <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
-          <span style="font-size:0.75rem;">${tag}</span>
-        </div>`;
-      }).join('');
-
-      barEl.innerHTML = `
-        <h4 style="margin-top:0;">每日标签${splitMultiTag ? '时长分布' : '归属时长'}${splitMultiTag ? '（已均摊）' : '（含重叠）'}</h4>
-        <div style="overflow-x:auto; padding-bottom:0.5rem;">
-          <div style="display:flex; gap:4px; align-items:flex-end; min-width:min-content;">
-            ${bars}
+        barEl.innerHTML = `
+          <h4 style="margin-top:0;">月度标签${splitMultiTag ? '时长分布' : '归属时长'}${splitMultiTag ? '（已均摊）' : '（含重叠）'}</h4>
+          <div style="overflow-x:auto; padding-bottom:0.5rem;">
+            <div style="display:flex; gap:4px; align-items:flex-end; min-width:min-content;">
+              ${bars}
+            </div>
           </div>
-        </div>
-        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem; font-size:0.75rem;">
-          ${legend}
-        </div>
-        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.25rem;">
-          ${splitMultiTag ? '各段时长已平均分配' : '各标签时长完整计入，柱子总和可能超过当天真实总时长'}
-        </div>
-      `;
+          <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem; font-size:0.75rem;">
+            ${legend}
+          </div>
+          <div style="font-size:0.7rem; color:var(--muted); margin-top:0.25rem;">
+            ${splitMultiTag ? '每月时长已按月聚合' : '每月标签归属时长，柱子总和可能超过当月真实总时长'}
+          </div>
+        `;
+      } else {
+        // 其他范围：按天显示
+        const days = sortedDays.slice(0, 14).reverse();
+
+        if (days.length === 0) {
+          barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+          return;
+        }
+
+        // 收集所有标签
+        const allTags = new Set();
+        days.forEach(day => {
+          if (dailyTagStats[day]) {
+            Object.keys(dailyTagStats[day]).forEach(t => allTags.add(t));
+          }
+        });
+        const tagList = Array.from(allTags);
+
+        if (tagList.length === 0) {
+          barEl.innerHTML = '<div style="color:var(--muted);">暂无数据</div>';
+          return;
+        }
+
+        // 找出每天最大时长用于计算高度
+        let maxDayTotal = 0;
+        days.forEach(day => {
+          const dayTotal = dailyTagStats[day]
+            ? Object.values(dailyTagStats[day]).reduce((s, v) => s + v, 0)
+            : 0;
+          if (dayTotal > maxDayTotal) maxDayTotal = dayTotal;
+        });
+
+        const barHeight = 120;
+        const barWidth = Math.max(20, Math.min(60, (barEl.clientWidth || 400) / days.length - 8));
+
+        const bars = days.map(day => {
+          const dayTags = dailyTagStats[day] || {};
+
+          let y = 0;
+          const segments = tagList.map(tag => {
+            const tagDur = dayTags[tag] || 0;
+            if (tagDur === 0) return '';
+            const segHeight = (tagDur / maxDayTotal) * barHeight;
+            const color = getStableTagColor(tag);
+            const seg = `<div style="position:absolute; bottom:${y}px; width:100%; height:${segHeight}px; background:${color}; border-radius:2px 2px 0 0;"></div>`;
+            y += segHeight;
+            return seg;
+          }).join('');
+
+          return `<div style="position:relative; width:${barWidth}px; height:${barHeight}px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center;">
+            ${segments}
+            <div style="font-size:0.65rem; color:var(--muted); margin-top:4px;">${day.slice(5)}</div>
+          </div>`;
+        }).join('');
+
+        const legend = tagList.map(tag => {
+          const color = getStableTagColor(tag);
+          return `<div style="display:flex; align-items:center; gap:0.3rem;">
+            <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
+            <span style="font-size:0.75rem;">${tag}</span>
+          </div>`;
+        }).join('');
+
+        barEl.innerHTML = `
+          <h4 style="margin-top:0;">每日标签${splitMultiTag ? '时长分布' : '归属时长'}${splitMultiTag ? '（已均摊）' : '（含重叠）'}</h4>
+          <div style="overflow-x:auto; padding-bottom:0.5rem;">
+            <div style="display:flex; gap:4px; align-items:flex-end; min-width:min-content;">
+              ${bars}
+            </div>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem; font-size:0.75rem;">
+            ${legend}
+          </div>
+          <div style="font-size:0.7rem; color:var(--muted); margin-top:0.25rem;">
+            ${splitMultiTag ? '各段时长已平均分配' : '各标签时长完整计入，柱子总和可能超过当天真实总时长'}
+          </div>
+        `;
+      }
     }
 
-    function renderWeekdayStats(weekdayStats) {
+    function renderWeekdayStats(weekdayStats, currentStatsRange) {
       const weekdayEl = document.getElementById('stats-weekday');
       const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
@@ -3032,10 +3525,18 @@ function exportTomatoPotato() {
         </div>`;
       }).join('');
 
+      // 检查是否有超过 7天的范围
+      let extraText = '';
+      const totalDaysCounted = Object.values(weekdayStats).reduce((s, x) => s + (x.dayCount || 0), 0);
+      if (totalDaysCounted < 8) {
+        extraText = '<div style="font-size:0.75rem; color:var(--muted); margin-top:0.25rem;">数据超过 7天后，周规律会更有意义。</div>';
+      }
+
       weekdayEl.innerHTML = `
         <h4 style="margin-top:0;">周规律（每天平均）</h4>
         ${bars}
         <div style="font-size:0.75rem; color:var(--muted); margin-top:0.5rem;">每日总时长÷天数，悬停显示天数</div>
+        ${extraText}
       `;
     }
 
@@ -3057,6 +3558,9 @@ function exportTomatoPotato() {
         if (id === 'tab-stats') {
           document.getElementById('stats-split-toggle').checked = getStatsSplitMultiTagDuration();
           renderStats();
+        }
+        if (id === 'tab-export-cat') {
+          renderCatExportTab();
         }
       };
 
