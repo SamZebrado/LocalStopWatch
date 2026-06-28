@@ -2153,10 +2153,9 @@ function getAllTagsFromIntervals() {
 }
 
 function catExportGetItemDuration(item) {
-  // 优先使用 setDuration（手动指定时间）
+  // 返回有效分钟数（纯数字，用于内部计算）
   if (item.setDuration && String(item.setDuration).trim() !== '') {
     const sd = String(item.setDuration).trim();
-    // 支持 "15+1" 格式
     const parts = sd.match(/^(\d+)(?:\+(\d+))?$/);
     if (parts) {
       const base = parseInt(parts[1], 10);
@@ -2166,9 +2165,17 @@ function catExportGetItemDuration(item) {
     const n = parseFloat(sd);
     if (Number.isFinite(n) && n > 0) return n;
   }
-  // 否则使用自动计算的 durationMs
   const ms = Number(item.durationMs) || 0;
   return Math.round(ms / 60000);
+}
+
+function catExportDurationDisplay(item) {
+  // 返回显示用的分钟数字符串：setDuration 原样保留（含 "15+1" 格式），无则用自动计算数字
+  if (item.setDuration && String(item.setDuration).trim() !== '') {
+    return String(item.setDuration).trim();
+  }
+  const ms = Number(item.durationMs) || 0;
+  return String(Math.round(ms / 60000));
 }
 
 function catExportBuildLine(item, prevDateStr) {
@@ -2186,11 +2193,12 @@ function catExportBuildLine(item, prevDateStr) {
   const prefix = (cfg && cfg.enabled && cfg.prefix) ? cfg.prefix : '';
 
   const mins = catExportGetItemDuration(item);
+  const minsDisplay = catExportDurationDisplay(item);
   const memo = item.memo || '';
   const note = catExportNotes[item.id] || '';
 
   const body = memo;
-  const minsText = `花了${mins}分钟`;
+  const minsText = `花了${minsDisplay}分钟`;
   let line = `${datePrefix}${prefix}${minsText}${body ? ' ' + body : ''}`;
   if (note) {
     line += '；' + note;
@@ -2225,27 +2233,35 @@ function catExportGenerate() {
   const htmlLines = [];
 
   filtered.forEach(item => {
-    const { line, dateStr } = catExportBuildLine(item, prevDateStr);
-    lines.push(line);
-    // 富文本版：在 preview 中用 <strong> 包裹 "花了XX分钟"
     const endMs = Number(item.endTime) || 0;
     const d = new Date(endMs);
     const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const dateStr = `${d.toLocaleString(undefined, {month:'short'}).replace('.','')} ${d.getDate()}, ${d.getFullYear()}`;
     const datePrefix = (prevDateStr !== dateStr) ? `${timeStr}, ${dateStr}；` : `${timeStr}；`;
+
     const tagText = item.tag || '';
     const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
     const primaryTag = itemTags[0] || '';
     const cfg = catExportTagConfig[primaryTag];
     const prefix = (cfg && cfg.enabled && cfg.prefix) ? cfg.prefix : '';
-    const mins = catExportGetItemDuration(item);
+
+    const minsDisplay = catExportDurationDisplay(item);
     const memo = item.memo || '';
     const note = catExportNotes[item.id] || '';
-    const minsText = `花了${mins}分钟`;
-    let htmlLine = `${datePrefix}${prefix}<strong>${minsText}</strong>${memo ? ' ' + escapeHtml(memo) : ''}`;
+    const minsText = `花了${minsDisplay}分钟`;
+
+    let line = `${datePrefix}${prefix}${minsText}${memo ? ' ' + memo : ''}`;
+    if (note) {
+      line += '；' + note;
+    }
+    lines.push(line);
+
+    let htmlLine = `${datePrefix}${escapeHtml(prefix)}<strong>${escapeHtml(minsText)}</strong>${memo ? ' ' + escapeHtml(memo) : ''}`;
     if (note) {
       htmlLine += '；' + escapeHtml(note);
     }
     htmlLines.push(htmlLine);
+
     prevDateStr = dateStr;
   });
 
@@ -2349,7 +2365,7 @@ function renderCatExportTab() {
     '<th style="padding:0.3rem;border:1px solid var(--border);text-align:left;width:55%;">备注 / 感慨</th>' +
     '</tr>' +
     filtered.map(item => {
-      const mins = catExportGetItemDuration(item);
+      const minsDisplay = catExportDurationDisplay(item);
       const memo = item.memo || '';
       const endMs = Number(item.endTime) || 0;
       const d = new Date(endMs);
@@ -2362,7 +2378,7 @@ function renderCatExportTab() {
       const noteVal = catExportNotes[item.id] || '';
       return `<tr>
         <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;color:var(--muted);">
-          ${timeStr} ${prefix}<strong>花了${mins}分钟</strong>${memo ? ' ' + escapeHtml(memo) : ''}
+          ${timeStr} ${prefix}<strong>花了${minsDisplay}分钟</strong>${memo ? ' ' + escapeHtml(memo) : ''}
         </td>
         <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;">
           <textarea rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.9rem;"
