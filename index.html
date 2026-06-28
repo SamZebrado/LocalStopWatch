@@ -2138,7 +2138,8 @@ function exportTomatoPotato() {
 // === 选定类别日志导出功能 ===
 // 内存中的导出备注状态（页面刷新前有效）
 let catExportNotes = {}; // { itemId: string }
-let catExportSelectedTags = new Set(); // 选中的标签集合
+// 标签导出配置：{ tag: { enabled: boolean, prefix: string } }
+let catExportTagConfig = {};
 
 function getAllTagsFromIntervals() {
   const tagSet = new Set();
@@ -2177,13 +2178,12 @@ function catExportBuildLine(item, prevDateStr) {
   const dateStr = `${d.toLocaleString(undefined, {month:'short'}).replace('.','')} ${d.getDate()}, ${d.getFullYear()}`;
   const datePrefix = (prevDateStr !== dateStr) ? `${timeStr}, ${dateStr}；` : `${timeStr}；`;
 
-  // 提取标签前缀
+  // 提取标签前缀（使用用户配置的映射）
   const tagText = item.tag || '';
   const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
-  // 取第一个标签作为导出前缀的键
   const primaryTag = itemTags[0] || '';
-  const prefixKey = primaryTag.replace(/^#/, '');
-  const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+  const cfg = catExportTagConfig[primaryTag];
+  const prefix = (cfg && cfg.enabled && cfg.prefix) ? cfg.prefix : '';
 
   const mins = catExportGetItemDuration(item);
   const memo = item.memo || '';
@@ -2201,16 +2201,18 @@ function catExportBuildLine(item, prevDateStr) {
 
 function catExportGenerate() {
   const activeItems = intervals.filter(item => !item.withdrawn);
-  if (!catExportSelectedTags.size) {
+  const enabledTags = Object.entries(catExportTagConfig).filter(([k, v]) => v.enabled);
+  if (!enabledTags.length) {
     return { text: '', html: '' };
   }
+  const enabledTagSet = new Set(enabledTags.map(([k]) => k));
 
   // 过滤出包含任一选中标签的记录，并按结束时间升序排列
   const filtered = activeItems
     .filter(item => {
       const tagText = item.tag || '';
       const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
-      return itemTags.some(t => catExportSelectedTags.has(t));
+      return itemTags.some(t => enabledTagSet.has(t));
     })
     .sort((a, b) => Number(a.endTime) - Number(b.endTime));
 
@@ -2233,8 +2235,8 @@ function catExportGenerate() {
     const tagText = item.tag || '';
     const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
     const primaryTag = itemTags[0] || '';
-    const prefixKey = primaryTag.replace(/^#/, '');
-    const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+    const cfg = catExportTagConfig[primaryTag];
+    const prefix = (cfg && cfg.enabled && cfg.prefix) ? cfg.prefix : '';
     const mins = catExportGetItemDuration(item);
     const memo = item.memo || '';
     const note = catExportNotes[item.id] || '';
@@ -2256,6 +2258,7 @@ function escapeHtml(str) {
 
 function catExportRefresh() {
   catExportNotes = {};
+  catExportTagConfig = {};
   renderCatExportTab();
 }
 
@@ -2290,7 +2293,7 @@ function catExportCopyRich() {
 }
 
 function renderCatExportTab() {
-  // 渲染标签筛选器
+  // 渲染标签筛选器（可编辑前缀映射）
   const filterEl = document.getElementById('cat-export-tag-filter');
   const allTags = getAllTagsFromIntervals();
   if (!allTags.length) {
@@ -2301,22 +2304,36 @@ function renderCatExportTab() {
   }
 
   filterEl.innerHTML = '<strong style="margin-right:0.5rem;">标签筛选：</strong>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;">' +
     allTags.map(tag => {
-      const checked = catExportSelectedTags.has(tag) ? 'checked' : '';
-      return `<label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer;user-select:none;">
-        <input type="checkbox" value="${escapeHtml(tag)}" ${checked} onchange="catExportToggleTag(this)">
-        <span>${escapeHtml(tag)}</span>
-      </label>`;
-    }).join('');
+      // 初始化配置（默认关闭， prefix 默认用【标签名】）
+      if (!(tag in catExportTagConfig)) {
+        const label = tag.replace(/^#/, '');
+        catExportTagConfig[tag] = { enabled: false, prefix: `【${label}】` };
+      }
+      const cfg = catExportTagConfig[tag];
+      const checked = cfg.enabled ? 'checked' : '';
+      return `<div style="display:flex;align-items:center;gap:0.25rem;background:var(--panel);padding:0.25rem 0.5rem;border-radius:6px;border:1px solid var(--border);">
+        <input type="checkbox" id="cat-tag-${escapeHtml(tag)}" value="${escapeHtml(tag)}" ${checked} onchange="catExportToggleTag(this)" style="cursor:pointer;">
+        <label for="cat-tag-${escapeHtml(tag)}" style="cursor:pointer;user-select:none;white-space:nowrap;">${escapeHtml(tag)}</label>
+        <span style="color:var(--muted);font-size:0.85rem;">前缀：</span>
+        <input type="text" value="${escapeHtml(cfg.prefix)}" size="8"
+          style="font-size:0.85rem;padding:0.1rem 0.3rem;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);"
+          oninput="catExportSetPrefix('${escapeHtml(tag)}', this.value)"
+          title="可自定义导出前缀，例如【学习】">
+      </div>`;
+    }).join('') +
+    '</div>';
 
   // 渲染事件列表（表格编辑器样式）
   const listEl = document.getElementById('cat-export-event-list');
   const activeItems = intervals.filter(item => !item.withdrawn);
+  const enabledTagSet = new Set(Object.entries(catExportTagConfig).filter(([k, v]) => v.enabled).map(([k]) => k));
   const filtered = activeItems
     .filter(item => {
       const tagText = item.tag || '';
       const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
-      return itemTags.some(t => catExportSelectedTags.has(t));
+      return itemTags.some(t => enabledTagSet.has(t));
     })
     .sort((a, b) => Number(a.endTime) - Number(b.endTime));
 
@@ -2340,8 +2357,8 @@ function renderCatExportTab() {
       const tagText = item.tag || '';
       const itemTags = tagText.split(/\s+/).filter(t => t && t.startsWith('#'));
       const primaryTag = itemTags[0] || '';
-      const prefixKey = primaryTag.replace(/^#/, '');
-      const prefix = catExportSelectedTags.has(primaryTag) && prefixKey ? `【${prefixKey}】` : '';
+      const cfg = catExportTagConfig[primaryTag];
+      const prefix = (cfg && cfg.enabled && cfg.prefix) ? cfg.prefix : '';
       const noteVal = catExportNotes[item.id] || '';
       return `<tr>
         <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;color:var(--muted);">
@@ -2369,12 +2386,27 @@ function renderCatExportTab() {
 
 function catExportToggleTag(checkbox) {
   const tag = checkbox.value;
-  if (checkbox.checked) {
-    catExportSelectedTags.add(tag);
-  } else {
-    catExportSelectedTags.delete(tag);
+  if (!(tag in catExportTagConfig)) {
+    const label = tag.replace(/^#/, '');
+    catExportTagConfig[tag] = { enabled: false, prefix: `【${label}】` };
   }
+  catExportTagConfig[tag].enabled = checkbox.checked;
   renderCatExportTab();
+}
+
+function catExportSetPrefix(tag, value) {
+  if (!(tag in catExportTagConfig)) {
+    const label = tag.replace(/^#/, '');
+    catExportTagConfig[tag] = { enabled: false, prefix: value };
+  } else {
+    catExportTagConfig[tag].prefix = value;
+  }
+  // 实时更新预览
+  const { text, html } = catExportGenerate();
+  const previewEl = document.getElementById('cat-export-preview');
+  if (text) {
+    previewEl.innerHTML = html;
+  }
 }
 
 function catExportSetNote(itemId, value) {
