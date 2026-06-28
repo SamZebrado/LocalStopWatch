@@ -528,7 +528,8 @@ function updateAdvancedModeUI() {
 
   const exportCatTabBtn = document.getElementById('tab-export-cat-btn');
   if (exportCatTabBtn) {
-    exportCatTabBtn.style.display = isAdvancedMode ? '' : 'none';
+    // 选定类别日志导出在普通模式也可用
+    exportCatTabBtn.style.display = '';
   }
 
   const importBtn = document.getElementById('import-records-btn');
