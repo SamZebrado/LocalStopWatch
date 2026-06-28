@@ -2200,7 +2200,7 @@ function catExportBuildLine(item, prevDateStr) {
 
   const body = memo;
   const minsText = `花了${minsDisplay}分钟`;
-  let line = `${datePrefix}${prefix}${minsText}${body ? ' ' + body : ''}`;
+  let line = `${datePrefix}${prefix}${minsText}${body || ''}`;
   if (note) {
     line += '；' + note;
   }
@@ -2251,13 +2251,13 @@ function catExportGenerate() {
     const note = catExportNotes[item.id] || '';
     const minsText = `花了${minsDisplay}分钟`;
 
-    let line = `${datePrefix}${prefix}${minsText}${memo ? ' ' + memo : ''}`;
+    let line = `${datePrefix}${prefix}${minsText}${memo || ''}`;
     if (note) {
       line += '；' + note;
     }
     lines.push(line);
 
-    let htmlLine = `${datePrefix}${escapeHtml(prefix)}<strong>${escapeHtml(minsText)}</strong>${memo ? ' ' + escapeHtml(memo) : ''}`;
+    let htmlLine = `${datePrefix}${escapeHtml(prefix)}<strong>${escapeHtml(minsText)}</strong>${escapeHtml(memo)}`;
     if (note) {
       htmlLine += '；' + escapeHtml(note);
     }
