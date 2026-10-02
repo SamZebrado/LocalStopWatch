@@ -5,6 +5,10 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('Local Stopwatch Tests', () => {
   test.beforeEach(async ({ page }) => {
+    // Provide an explicit parsing rule; a fresh browser has no keyword matches.
+    await page.addInitScript(() => {
+      localStorage.setItem('ruleTable', JSON.stringify([{ tag: '测试标签', keywords: ['测试'] }]));
+    });
     // 导航到本地文件
     await page.goto(pathToFileURL(path.resolve(__dirname, '..', 'index.html')).href);
   });
@@ -52,6 +56,8 @@ test.describe('Local Stopwatch Tests', () => {
 
     // 检查是否显示标签
     const intervalRecord = page.locator('.interval-record');
-    await expect(intervalRecord).toContainText('标签');
+    await expect(intervalRecord).toContainText('#测试标签');
+    await expect(intervalRecord.locator('input').first()).toHaveValue('测试备注');
+    await expect(intervalRecord.getByText('Tag:', { exact: false })).toHaveCount(0);
   });
 });

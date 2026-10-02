@@ -117,3 +117,10 @@
   - users can clear then type new values
   - empty blur restores previous valid value
 - Added button text auto-fit cap by button area to reduce overflow when button font is set large.
+
+## 2026-10-02 — Codex engineering maintenance
+
+- Corrected the documented single-file entry to `index.html` and locked the browser test dependencies.
+- Render imported memos, tags, durations, prefixes, notes and backup keys as literal text; pass user values through DOM data attributes instead of inline JavaScript strings.
+- Added browser regression coverage for synthetic markup and quoted tag/item identifiers, preserving existing text and editing behavior.
+- No new timer or export features.

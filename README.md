@@ -52,25 +52,25 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
 
 ## 📁 文件说明（Files）
 
-- `stopwatch_combined.html`：主文件（唯一维护入口），双击即可使用  
+- `index.html`：主文件（唯一维护入口），双击即可使用<br>
   Main file (single-source maintenance target), open directly to use  
-- `stopwatch.html`：跳转入口，会自动跳到 `stopwatch_combined.html`  
-  Redirect entry that forwards to `stopwatch_combined.html`
+- 当前仓库不包含旧 `stopwatch.html` 跳转入口。<br>
+  The old `stopwatch.html` redirect is not included in the current repository.
 
 ---
 
 ## 🚀 使用方法（How to Use）
 
-1. 用 Chrome 打开 `stopwatch_combined.html`（建议使用最新版）  
-   Open `stopwatch_combined.html` with Chrome  
+1. 用 Chrome 打开 `index.html`（建议使用最新版）<br>
+   Open `index.html` with Chrome<br>
 2. 使用 Memo 区、标签输入、解析规则来记录 interval  
    Use memo box, tags, and rules to annotate intervals  
 3. 使用导出按钮导出 CSV、番茄格式或日志  
    Use export buttons to get CSV, tomato format, or logs  
 4. 点击右上角按钮切换中英文界面  
    Switch UI language via the top-right button  
-5. 我已上传一个手动整合版本：`stopwatchMergedManually.html`，可直接下载并在其他设备（例如手机）独立使用，无需单独下载其他 js 文件  
-   I've uploaded a manually merged version: `stopwatchMergedManually.html`, which you can download and use directly on other devices (e.g. your phone), without needing separate JS files.
+5. 我已上传一个手动整合版本：`index.html`，可直接下载并在其他设备（例如手机）独立使用，无需单独下载其他 js 文件<br>
+   I've uploaded a manually merged version: `index.html`, which you can download and use directly on other devices (e.g. your phone), without needing separate JS files.
 
    在红米 K50 手机上测试，计时与导出功能运行正常；但系统自带浏览器无法解析 Memo 内容，  
    Tested on a Redmi K50: timing and export features work fine, but the default browser fails to parse memos.
@@ -78,8 +78,8 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
    改用 QQ 浏览器后所有功能均可正常使用，看来确实是浏览器兼容性的问题。  
    Switching to QQ Browser fixed everything—so it seems to be a browser compatibility issue.
 
-   原本我打算使用 `combine_html.m`（一个 MATLAB 脚本，也应该可以在 Octave 中运行）来自动整合网页内容，  
-   I originally planned to use `combine_html.m` (a MATLAB script that should also work in Octave) to automate the merging.
+   原本我打算使用 `mergeJSintoHTML.m`（一个 MATLAB 脚本，也应该可以在 Octave 中运行）来自动整合网页内容，<br>
+   I originally planned to use `mergeJSintoHTML.m` (a MATLAB script that should also work in Octave) to automate the merging.
 
    但脚本目前还有 bug，暂时没修，有空再说吧（逃）🧩  
    But the script still has a bug—I haven’t fixed it yet. Maybe later… 😅
@@ -132,13 +132,13 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 
 ### 🔧 网页合并脚本更新（HTML Merging Script Updated）
 
-- 修复了 `combine_html.m` 中 `<script>` 标签替换失败的问题；
+- 修复了 `mergeJSintoHTML.m` 中 `<script>` 标签替换失败的问题；
 - 支持将多个 JS 模块正确嵌入 HTML，适用于打包离线版本；
-- 尚未在 Octave 中实际测试，但理论上兼容。
+- 尚未在 Octave 中实际测试；兼容性未验证。
 
-- Fixed a bug in `combine_html.m` where `<script>` tag replacement previously failed;
+- Fixed a bug in `mergeJSintoHTML.m` where `<script>` tag replacement previously failed;
 - Now supports correctly embedding all JS modules into the final HTML for offline use;
-- Not yet tested in Octave, but expected to be compatible.
+- Octave compatibility has not been tested and remains unverified.
 
 ### ☁️ 坚果云定时备份（Nutstore Scheduled Backup）- 2026-03-02
 
@@ -147,14 +147,14 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 - 新增自动上传开关，可按小时周期定时上传；
 - 远程路径支持子目录（如 `NewMars/LocalStopWatch_backup_latest.json`）；
 - 路径会自动 URL 编码，兼容中文目录；
-- 更新了 `stopwatch_combined.html`，手机单文件版本同步具备以上功能。
+- 更新了 `index.html`，手机单文件版本同步具备以上功能。
 
 - Added Nutstore WebDAV settings: account, app password, remote path, and hourly schedule;
 - Added “Upload Backup Now”;
 - Added auto-upload toggle with hour-based interval;
 - Remote path supports subfolders (e.g. `NewMars/LocalStopWatch_backup_latest.json`);
 - Path is URL-encoded automatically for better compatibility with non-ASCII folder names;
-- `stopwatch_combined.html` is regenerated and includes all new features.
+- `index.html` is regenerated and includes all new features.
 
 ### 🔐 隐私与凭据说明（Privacy & Credentials）
 
@@ -168,13 +168,13 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 
 ### 🧩 维护策略更新（Maintenance Policy Update）- 2026-03-02
 
-- 项目已切换为“单文件维护模式”：后续只改 `stopwatch_combined.html`；
+- 项目已切换为“单文件维护模式”：后续只改 `index.html`；
 - 历史分文件脚本（`timer.js`、`ruleTable.js`、`memoParser.js`、`exportTomato.js`）已从 git 跟踪中删除；
-- `stopwatch.html` 保留为跳转入口，避免旧链接失效。
+- 当前公开版本使用 `index.html`；旧 `stopwatch.html` 跳转入口已不在仓库中。
 
-- Project now uses single-file maintenance: update `stopwatch_combined.html` only;
+- Project now uses single-file maintenance: update `index.html` only;
 - Legacy split JS files (`timer.js`, `ruleTable.js`, `memoParser.js`, `exportTomato.js`) are removed from git tracking;
-- `stopwatch.html` is kept as a redirect entry to preserve old links.
+- The current public version uses `index.html`; the old `stopwatch.html` redirect is no longer in the repository.
 
 ### 🤖 Codex 更新记录（Codex Update Notes）- 2026-03-02
 
@@ -195,9 +195,9 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 - 高级模式按钮支持“长按打开主题列表”：
   - 可选时髦主题：黑曜、石墨灰、瓷白、钴蓝、琥珀橙、暮紫（不含绿色）；
   - 主题选择会持久化保存。
-- `stopwatch_combined.html` 已增加手机友好响应式布局：
+- `index.html` 已增加手机友好响应式布局：
   - 放大或窄屏时按钮会自动换行，避免超出屏幕。
-- `stopwatch_mobile.html` 已从仓库移除，统一由 `stopwatch_combined.html` 负责桌面与手机显示。
+- `stopwatch_mobile.html` 已从仓库移除，统一由 `index.html` 负责桌面与手机显示。
 - 计时器页按钮布局优化：
   - “记下”独占一行并加高加厚，减少误触；
   - “导出并清空记录”和“导出CSV”并排一行。
@@ -216,7 +216,7 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
   - 语言按钮/高级模式按钮位于主标题下方；
   - "计时器"页签单独一行，"定义备注解析规则"与"运行日志和备份"同一行。
 
-### 🤖 最新更新记录（Latest Update Notes）- 2026-03-18
+### 🤖 更新记录（Update Notes）- 2026-03-18
 
 > 本次功能迭代使用了 **ChatGPT、CodeX 与 TRAE CN** 进行实现与测试。
 > This round of implementation and testing was done with **ChatGPT, CodeX & TRAE CN**.
@@ -240,3 +240,28 @@ I've spent way too much time on this... borderline addicted. I hope I can bring 
 ---
 
 Made with ❤️ by Captain Sam, ChatGPT, CodeX & TRAE CN
+
+## 开发验证 / Development checks
+
+当前公开版以 `index.html` 为唯一应用入口。使用 Node.js 22+ 安装锁定的测试依赖；首次测试需要安装 Chromium。
+The current public app entry is `index.html`. With Node.js 22+, install the locked test dependencies and Chromium before the first run.
+
+```sh
+npm ci --ignore-scripts
+npm run install:playwright
+npm test
+```
+
+测试覆盖高级模式字号面板和精简模式标签展示；不代表所有导入导出或移动浏览器均已验证。
+The browser suite covers the advanced font panel and simplified-mode tags; it does not validate every import/export path or mobile browser.
+
+本仓库尚未声明开源许可证；公开可见不等于授予使用或再分发许可。
+No open-source license is declared in this repository; public visibility does not grant reuse or redistribution rights.
+
+### Rendering safety / 内容显示安全
+
+Imported records, memos, tags, custom export prefixes and backup names are displayed as literal text. They cannot supply HTML or event-handler code. Keep exported backups private: they still contain your records.
+
+导入记录、备注、标签、导出前缀和备份名称按普通文字显示，不作为 HTML 或事件处理代码执行。备份仍含有您的记录，请妥善保管。
+
+For an already-installed compatible Chromium, tests can use the optional `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` environment variable. Otherwise use the browser installation command above.
