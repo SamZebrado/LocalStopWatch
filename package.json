@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "playwright test",
+    "test": "node tests/csv-roundtrip-test.js && node tests/stats-aggregation-test.js && playwright test",
     "install:playwright": "playwright install chromium",
     "test:e2e": "playwright test"
   },
