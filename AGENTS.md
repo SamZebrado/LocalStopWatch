@@ -3,7 +3,7 @@
 Project preferences for future Codex sessions.
 
 ## Product Direction
-- Maintain single-file app: update only `stopwatch_combined.html`.
+- Maintain single-file app: update only `index.html`.
 - Mobile-first offline usage is the default target.
 
 ## UI / UX Preferences

@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/csv-roundtrip-test.js && node tests/stats-aggregation-test.js",
-    "install:playwright": "npx playwright install",
-    "test:e2e": "node tests/local-stopwatch-test.js"
+    "test": "playwright test",
+    "install:playwright": "playwright install chromium",
+    "test:e2e": "playwright test"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@playwright/test": "1.61.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

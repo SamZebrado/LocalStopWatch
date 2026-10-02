@@ -261,21 +261,21 @@ function renderIntervals() {
     const mins = item.durationMs ? (item.durationMs / 60000).toFixed(2) : '--';
     const endTimeStr = formatDateWithTimezone(new Date(item.endTime));
     const advancedFields = isAdvancedMode ? `
-      <div>Tag: <input value="${item.tag || ''}" oninput="updateTag(${trueIndex}, this.value)"></div>
-      <div>指定时间（分钟）: <input type="number" value="${item.setDuration || ''}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
+      <div>Tag: <input value="${escapeHtml(item.tag || '')}" oninput="updateTag(${trueIndex}, this.value)"></div>
+      <div>指定时间（分钟）: <input type="number" value="${escapeHtml(item.setDuration || '')}" oninput="updateSetDuration(${trueIndex}, this.value)"></div>
     ` : '';
     // 精简模式下显示解析后的标签和时间
     const simpleModeTag = !isAdvancedMode && item.parsed && item.tag ? `
-      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em; margin-right: 1em;">${item.tag}</span>
+      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em; margin-right: 1em;">${escapeHtml(item.tag)}</span>
     ` : '';
     const simpleModeDuration = !isAdvancedMode && item.parsed && item.setDuration ? `
-      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em;">${item.setDuration}分钟</span>
+      <span style="color: var(--muted); font-size: 0.9em; margin-left: 1em;">${escapeHtml(item.setDuration)}分钟</span>
     ` : '';
     const withdrawnIndicator = item.withdrawn ? `<div style="color: #666; font-style: italic;">已撤回</div>` : '';
     div.innerHTML = `
       ${withdrawnIndicator}
       <div><strong class="duration">${mins} 分钟</strong></div>
-      <div>Memo: ${simpleModeTag}<input value="${item.memo}" oninput="updateMemo(${trueIndex}, this.value)">${simpleModeDuration}</div>
+      <div>Memo: ${simpleModeTag}<input value="${escapeHtml(item.memo)}" oninput="updateMemo(${trueIndex}, this.value)">${simpleModeDuration}</div>
       ${advancedFields}
       <div>结束时间: ${endTimeStr}</div>
       <button onclick="parseMemo(${trueIndex})" ${item.withdrawn ? 'disabled' : ''}>解析Memo</button>
@@ -1251,7 +1251,11 @@ function listAllBackups() {
   allKeys.reverse();
   allKeys.forEach((key, i) => {
     const div = document.createElement('div');
-    div.innerHTML = `${i + 1}. ${key} <button onclick="exportBackupToCSV('${key}')">导出CSV</button>`;
+    div.appendChild(document.createTextNode(`${i + 1}. ${key} `));
+    const exportButton = document.createElement('button');
+    exportButton.textContent = '导出CSV';
+    exportButton.addEventListener('click', () => exportBackupToCSV(key));
+    div.appendChild(exportButton);
     container.appendChild(div);
   });
 }
@@ -2270,7 +2274,7 @@ function catExportGenerate() {
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function catExportRefresh() {
@@ -2336,7 +2340,7 @@ function renderCatExportTab() {
         <span style="color:var(--muted);font-size:0.85rem;">前缀：</span>
         <input type="text" value="${escapeHtml(cfg.prefix)}" size="8"
           style="font-size:0.85rem;padding:0.1rem 0.3rem;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);"
-          oninput="catExportSetPrefix('${escapeHtml(tag)}', this.value)"
+          data-tag="${escapeHtml(tag)}" oninput="catExportSetPrefix(this.dataset.tag, this.value)"
           title="可自定义导出前缀，例如【学习】">
       </div>`;
     }).join('') +
@@ -2379,13 +2383,13 @@ function renderCatExportTab() {
       const noteVal = catExportNotes[item.id] || '';
       return `<tr>
         <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;color:var(--muted);">
-          ${timeStr} ${prefix}<strong>花了${minsDisplay}分钟</strong>${memo ? ' ' + escapeHtml(memo) : ''}
+          ${timeStr} ${escapeHtml(prefix)}<strong>花了${escapeHtml(minsDisplay)}分钟</strong>${memo ? ' ' + escapeHtml(memo) : ''}
         </td>
         <td style="padding:0.3rem;border:1px solid var(--border);vertical-align:top;">
           <textarea rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.9rem;"
-            id="cat-note-${item.id}"
+            id="cat-note-${escapeHtml(item.id)}" data-item-id="${escapeHtml(item.id)}"
             placeholder="添加备注或感慨..."
-            oninput="catExportSetNote('${item.id}', this.value)">${escapeHtml(noteVal)}</textarea>
+            oninput="catExportSetNote(this.dataset.itemId, this.value)">${escapeHtml(noteVal)}</textarea>
         </td>
       </tr>`;
     }).join('') +
@@ -3254,7 +3258,7 @@ function catExportSetNote(itemId, value) {
           </div>
           <div style="flex:1 1 200px;">
             <div style="font-size:0.8rem; color:var(--muted);">最常见标签</div>
-            <div style="font-size:1.8rem; font-weight:700;">${mostCommonTag}</div>
+            <div style="font-size:1.8rem; font-weight:700;">${escapeHtml(mostCommonTag)}</div>
           </div>
         </div>
         <div style="font-size:0.75rem; color:var(--muted); margin-top:0.5rem;">
@@ -3269,7 +3273,7 @@ function catExportSetNote(itemId, value) {
         sortedByCount.length
           ? sortedByCount.map(([tag, s]) =>
             `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
-              <span>${tag}</span>
+              <span>${escapeHtml(tag)}</span>
               <span style="font-weight:700;">${s.recordCount}条</span>
             </div>`
           ).join('')
@@ -3283,7 +3287,7 @@ function catExportSetNote(itemId, value) {
         sortedByDuration.length
           ? sortedByDuration.map(([tag, s]) =>
             `<div style="display:flex; justify-content:space-between; padding:0.25rem 0;">
-              <span>${tag}</span>
+              <span>${escapeHtml(tag)}</span>
               <span style="font-weight:700;">${formatDuration(s.duration)}</span>
             </div>`
           ).join('')
@@ -3373,7 +3377,7 @@ function catExportSetNote(itemId, value) {
         const color = getStableTagColor(tag);
         return `<div style="display:flex; align-items:center; gap:0.5rem; padding:0.2rem 0;">
           <span style="width:12px; height:12px; background:${color}; border-radius:2px;"></span>
-          <span style="flex:1;">${tag}</span>
+          <span style="flex:1;">${escapeHtml(tag)}</span>
           <span style="color:var(--muted);">${pct}%</span>
         </div>`;
       }).join('');
@@ -3451,7 +3455,7 @@ function catExportSetNote(itemId, value) {
           const color = getStableTagColor(tag);
           return `<div style="display:flex; align-items:center; gap:0.3rem;">
             <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
-            <span style="font-size:0.75rem;">${tag}</span>
+            <span style="font-size:0.75rem;">${escapeHtml(tag)}</span>
           </div>`;
         }).join('');
 
@@ -3528,7 +3532,7 @@ function catExportSetNote(itemId, value) {
           const color = getStableTagColor(tag);
           return `<div style="display:flex; align-items:center; gap:0.3rem;">
             <span style="width:10px; height:10px; background:${color}; border-radius:2px;"></span>
-            <span style="font-size:0.75rem;">${tag}</span>
+            <span style="font-size:0.75rem;">${escapeHtml(tag)}</span>
           </div>`;
         }).join('');
 
