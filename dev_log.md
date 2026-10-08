@@ -1,5 +1,38 @@
 # Dev Log
 
+## 2026-10-08 — Remember Long Press & Record History Entry (CodeX/Codex)
+
+### Local candidate, not pushed or deployed
+- Live remote main was `8888c31af6b33184bf1f9bd23d2db170892a2397`; the published page did not include the previous memo/CSV candidate. Fast-forwarded the local base and carried the existing candidate forward with a three-way merge, retaining all remote rendering-safety fixes, locked dependencies and regression tests. Prior candidate source and a recovery stash are preserved in the local evidence pack.
+- Removed the main memo plus button. Remember short activation still records once. Holding for 550ms opens recent items and suppresses the release click. Movement over 10px, scrolling, cancellation, focus loss, multiple pointers and disabled state cancel a pending hold without creating a record.
+- Added ArrowDown/ArrowUp keyboard access, screen-reader descriptions, a one-time persistent discovery hint, Escape/outside/focus dismissal and a close button. Touch context menus and blue tap highlighting are suppressed on these controls.
+- Added history-clock buttons to current record editors, with the label “最近事项” / “Recent items”. Choosing an item follows the existing editor's input autosave convention; it does not add an interval, run parsing, or change timing/tag fields. Withdrawn record entries are disabled.
+- Reduced the shared chooser to at most 264px and sized it against the target and visible viewport, including reduced-height views. The main input and Remember button remain available. Comparison keys and the prior CSV confirmation/`Cleared_` naming behavior are retained.
+- Tests use synthetic records only. Added deterministic gesture boundary cases and real browser regression cases; updated isolated desktop/touch checks and previews. Runtime remains a single `index.html` file; no production dependencies added.
+
+### Validation and local evidence
+- `npm test` passes the CSV/statistics/memo checks, 18 deterministic gesture boundary checks, and all 7 Chromium regression cases. The separate UI script passes 70 synthetic-data desktop/touch checks, including real touch-hold release, targeted record editing, undo/redo freshness, CSV downloads and reduced visible viewports. A physical phone keyboard has not been tested.
+- Saved desktop/mobile screenshots, synthetic CSV files and an isolated in-memory HTML preview under `test-results/memo-longpress-20261008/`. Browser contexts close in `finally`; no Playwright MCP session is created.
+- Scoped Playwright output to `test-results/playwright/` after its default cleanup removed earlier preview evidence. Recovered the prior candidate sources and exact patch byte-for-byte from the retained Git stash; prior PNGs could not be recovered. Current previews are intact, and a subsequent full test run verified they remain intact. The evidence pack includes an explicit recovery report.
+- Local base is `8888c31`; candidate edits remain uncommitted. No push, pull request, merge publication or deployment was performed. Independent review and release authorization remain pending.
+
+## 2026-10-07 — Memo History Reuse & CSV Confirmation (CodeX/Codex)
+
+### Implemented locally, pending independent review
+- Confirmed `origin` is `SamZebrado/LocalStopWatch`, with a clean `main` checkout before edits (base `a8bde17`). No existing user changes were overwritten.
+- Kept runtime changes in the actual single-file entry, `index.html`. Commit `ce7d08b` renamed `stopwatch_combined.html`; corrected the README entry instructions while preserving historical notes.
+- Added a theme-aware rounded plus button and lightweight recent-memo popup. It sorts a copy by end time, excludes withdrawn/blank records, and scans until ten unique memos are found.
+- Comparison keys remove repeated trailing “等效” and Arabic numeric suffixes (including decimals). Numeric-only or marker-only keys fall back to the trimmed original. Current saved memo text is used; stale `originalMemo` is not resurrected after edits. No memo parser or stored history changes.
+- Added editable full-text refill, keyboard navigation, Escape and outside/focus dismissal, long-text ellipsis, and viewport-aware popup placement for narrow screens.
+- Ordinary CSV export now has one modal confirmation; its filename remains `Uncleared_`. Export & Clear retains one destructive-action confirmation and now uses `Cleared_` filenames. Cancellation, Escape and backdrop clicks do not download or change records; duplicate confirm callbacks cannot download twice.
+- Native `<dialog>` supplies modal focus and Escape behavior in current Chromium browsers. As before, clear occurs after a download is initiated; browsers do not provide confirmation that the user completed saving the file.
+
+### Validation and handoff
+- Added pure Node tests for normalization, source ordering, empty-key fallback, deduplication beyond ten candidates, unchanged history, CSV filename semantics, cancellation and duplicate confirmations; included these in `npm test`.
+- All 55 isolated Chromium desktop/mobile checks passed: full-text refill, keyboard/focus behavior, languages, advanced-mode visibility, undo/redo freshness, actual button-triggered downloads and both cancellation paths. Browser contexts close in `finally`; no Playwright MCP session is created.
+- Existing CSV round-trip and statistics tests remain passing. Inline scripts compile and `git diff --check` passes.
+- Saved synthetic desktop/mobile screenshots and an isolated standalone HTML preview locally; no private browser records were read or captured. No dependencies installed, commits published, pull requests opened, or deployments performed.
+
 ## 2026-03-02
 
 ### Scope

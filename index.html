@@ -190,8 +190,8 @@ function downloadCsvContent(csv, filename) {
   URL.revokeObjectURL(url);
 }
 
-function buildNormalCsvFilename(now) {
-  return `Uncleared_${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
+function buildNormalCsvFilename(now, cleared = false) {
+  return `${cleared ? 'Cleared' : 'Uncleared'}_${now.toLocaleTimeString().replace(/:/g, '：')} ${now.toLocaleDateString()} ${Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).format(now).split(' ').pop()}.csv`;
 }
 
 function buildBackupCsvFilename(now) {
@@ -199,14 +199,14 @@ function buildBackupCsvFilename(now) {
   return `backup_${stamp}.csv`;
 }
 
-function exportIntervalsToCSV() {
+function exportIntervalsToCSV(cleared = false) {
   const activeRecords = intervals.filter(item => !item.withdrawn);
   if (!activeRecords.length) {
-    alert('没有未撤回的记录可导出');
+    alert(getI18n('noActiveRecords'));
     return false;
   }
   const csv = buildIntervalsCsv(false); // 普通导出排除撤回记录
-  downloadCsvContent(csv, buildNormalCsvFilename(new Date()));
+  downloadCsvContent(csv, buildNormalCsvFilename(new Date(), cleared));
   return true;
 }
 
@@ -244,6 +244,7 @@ function getFirstIntervalStartTime() {
 }
 
 function renderIntervals() {
+  closeMemoHistory();
   const container = document.getElementById('intervals-container');
   container.innerHTML = '';
 
@@ -275,7 +276,13 @@ function renderIntervals() {
     div.innerHTML = `
       ${withdrawnIndicator}
       <div><strong class="duration">${mins} 分钟</strong></div>
-      <div>Memo: ${simpleModeTag}<input value="${escapeHtml(item.memo)}" oninput="updateMemo(${trueIndex}, this.value)">${simpleModeDuration}</div>
+      <div>Memo: ${simpleModeTag}</div>
+      <div class="record-memo-entry">
+        <input value="${escapeHtml(item.memo)}" oninput="updateMemo(${trueIndex}, this.value)">
+        <button class="record-memo-history" type="button" data-index="${trueIndex}" onclick="openRecordMemoHistory(this)" aria-label="${escapeHtml(getI18n('memoHistoryLabel'))}" title="${escapeHtml(getI18n('memoHistoryLabel'))}" aria-haspopup="dialog" aria-expanded="false" aria-controls="memo-history-panel" ${item.withdrawn ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 11a9 9 0 1 0 3-6.7M3 3v6h6M12 7v5l4 2"/></svg>
+        </button>${simpleModeDuration}
+      </div>
       ${advancedFields}
       <div>结束时间: ${endTimeStr}</div>
       <button onclick="parseMemo(${trueIndex})" ${item.withdrawn ? 'disabled' : ''}>解析Memo</button>
@@ -601,6 +608,270 @@ function rememberInterval() {
   updateUndoRedoButtons(); // 更新撤回/恢复按钮状态
 }
 
+// === 备注历史复用：仅在比较时规范化，不改动已保存的备注 ===
+function normalizeMemoHistoryKey(memo) {
+  const raw = String(memo ?? '').trim();
+  let key = raw;
+  let previous;
+  do {
+    previous = key;
+    key = key.replace(/(?:等效|\d+(?:\.\d+)?)\s*$/, '').trim();
+  } while (key !== previous);
+  // 数字或“等效”单独成条时保留原文作为 key，避免吞掉真实条目。
+  return key || raw;
+}
+
+function getRecentUniqueMemos(records = intervals) {
+  const seen = new Set();
+  const memos = [];
+  // 导入记录可能乱序；只排序副本，同时间优先数组中较后的记录。
+  const newestFirst = records.slice().reverse().sort((a, b) =>
+    (Number(b?.endTime) || 0) - (Number(a?.endTime) || 0));
+  for (const item of newestFirst) {
+    if (!item || item.withdrawn || typeof item.memo !== 'string' || !item.memo.trim()) continue;
+    const key = normalizeMemoHistoryKey(item.memo);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    memos.push(item.memo);
+    if (memos.length === 10) break;
+  }
+  return memos;
+}
+
+let memoHistoryTrigger = null;
+let memoHistoryTarget = null;
+let memoHistoryRecordIndex = null;
+let rememberPress = null;
+let rememberClickBlocked = false;
+const activeMemoPointers = new Set();
+const REMEMBER_HISTORY_HINT_KEY = 'remember_history_hint_seen_v1';
+const REMEMBER_LONG_PRESS_MS = 550;
+
+function updateMemoHistoryLabels() {
+  const remember = document.getElementById('remember-btn');
+  if (remember) {
+    remember.setAttribute('aria-label', getI18n('rememberWithHistory'));
+    remember.title = getI18n('rememberHistoryHint');
+  }
+  document.querySelectorAll('.record-memo-history').forEach(button => {
+    button.setAttribute('aria-label', getI18n('memoHistoryLabel'));
+    button.title = getI18n('memoHistoryLabel');
+  });
+  const close = document.getElementById('memo-history-close');
+  if (close) close.setAttribute('aria-label', getI18n('closeRecentItems'));
+}
+
+function closeMemoHistory(restoreFocus = false) {
+  const panel = document.getElementById('memo-history-panel');
+  if (!panel) return;
+  const trigger = memoHistoryTrigger;
+  const wasOpen = !panel.hidden;
+  panel.hidden = true;
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+  memoHistoryTrigger = memoHistoryTarget = memoHistoryRecordIndex = null;
+  if (restoreFocus && wasOpen && trigger?.isConnected) trigger.focus({ preventScroll: true });
+}
+
+function positionMemoHistory() {
+  const panel = document.getElementById('memo-history-panel');
+  if (!panel || panel.hidden || !memoHistoryTrigger?.isConnected) return;
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft || 0;
+  const top = viewport?.offsetTop || 0;
+  const width = Math.min(viewport?.width || window.innerWidth, document.documentElement.clientWidth);
+  const height = Math.min(viewport?.height || window.innerHeight, document.documentElement.clientHeight);
+  const triggerRect = memoHistoryTrigger.getBoundingClientRect();
+  const inputRect = memoHistoryTarget.getBoundingClientRect();
+  const anchorTop = Math.min(triggerRect.top, inputRect.top);
+  const anchorBottom = Math.max(triggerRect.bottom, inputRect.bottom);
+  const above = anchorTop - top - 20;
+  const below = top + height - anchorBottom - 20;
+  const upwards = above >= below || (memoHistoryTrigger.id === 'remember-btn' && above >= 100);
+  const room = Math.max(0, upwards ? above : below);
+  const anchorWidth = Math.max(triggerRect.right, inputRect.right) - Math.min(triggerRect.left, inputRect.left);
+  panel.style.width = `${Math.min(380, width - 24, Math.max(160, anchorWidth))}px`;
+  panel.style.maxHeight = `${Math.min(264, height * 0.36, room)}px`;
+  const panelRect = panel.getBoundingClientRect();
+  const preferredLeft = memoHistoryTrigger.id === 'remember-btn'
+    ? triggerRect.left + (triggerRect.width - panelRect.width) / 2
+    : triggerRect.right - panelRect.width;
+  panel.style.left = `${Math.max(left + 12, Math.min(preferredLeft, left + width - panelRect.width - 12))}px`;
+  const preferredTop = upwards ? anchorTop - panelRect.height - 8 : anchorBottom + 8;
+  panel.style.top = `${Math.max(top + 12, Math.min(preferredTop, top + height - panelRect.height - 12))}px`;
+  panel.dataset.placement = upwards ? 'above' : 'below';
+}
+
+function hideRememberHistoryHint() {
+  const hint = document.getElementById('remember-history-hint');
+  if (hint) hint.hidden = true;
+}
+
+function openMemoHistory(trigger = document.getElementById('remember-btn'), target = document.getElementById('memo-input'), recordIndex = null, focusEdge = 'first') {
+  if (!trigger || trigger.disabled || !target?.isConnected) return;
+  if (recordIndex !== null && (!intervals[recordIndex] || intervals[recordIndex].withdrawn)) return;
+  closeMemoHistory();
+  memoHistoryTrigger = trigger;
+  memoHistoryTarget = target;
+  memoHistoryRecordIndex = recordIndex;
+  const panel = document.getElementById('memo-history-panel');
+  const list = document.getElementById('memo-history-list');
+  list.replaceChildren();
+  const memos = getRecentUniqueMemos();
+  document.getElementById('memo-history-empty').hidden = memos.length > 0;
+  memos.forEach(memo => {
+    const row = document.createElement('li');
+    const choice = document.createElement('button');
+    choice.type = 'button';
+    choice.className = 'memo-history-choice';
+    choice.textContent = memo;
+    choice.title = memo;
+    choice.addEventListener('click', () => {
+      if (!target.isConnected || (recordIndex !== null && intervals[recordIndex]?.withdrawn)) {
+        closeMemoHistory();
+        return;
+      }
+      target.value = memo;
+      // Existing record editors already save on input; do not create a timer record.
+      if (recordIndex !== null) target.dispatchEvent(new Event('input', { bubbles: true }));
+      closeMemoHistory();
+      target.focus({ preventScroll: true });
+      target.setSelectionRange(memo.length, memo.length);
+    });
+    row.appendChild(choice);
+    list.appendChild(row);
+  });
+  panel.hidden = false;
+  trigger.setAttribute('aria-expanded', 'true');
+  hideRememberHistoryHint();
+  positionMemoHistory();
+  const choices = list.querySelectorAll('button');
+  (choices.length ? choices[focusEdge === 'last' ? choices.length - 1 : 0] : document.getElementById('memo-history-close')).focus({ preventScroll: true });
+}
+
+function openRecordMemoHistory(button) {
+  if (memoHistoryTrigger === button) {
+    closeMemoHistory(true);
+    return;
+  }
+  const target = button.closest('.record-memo-entry').querySelector('input');
+  openMemoHistory(button, target, Number(button.dataset.index));
+}
+
+function cancelRememberPress() {
+  if (!rememberPress) return;
+  clearTimeout(rememberPress.timer);
+  rememberPress = null;
+  rememberClickBlocked = true;
+}
+
+function handleRememberClick(event) {
+  if (event.currentTarget.disabled || (event.detail > 0 && rememberClickBlocked)) {
+    event.preventDefault();
+    return;
+  }
+  cancelRememberPress();
+  hideRememberHistoryHint();
+  closeMemoHistory();
+  rememberInterval();
+}
+
+function initMemoHistory() {
+  updateMemoHistoryLabels();
+  const remember = document.getElementById('remember-btn');
+  const panel = document.getElementById('memo-history-panel');
+  const list = document.getElementById('memo-history-list');
+  const hint = document.getElementById('remember-history-hint');
+  if (localStorage.getItem(REMEMBER_HISTORY_HINT_KEY) !== '1') {
+    hint.hidden = false;
+    localStorage.setItem(REMEMBER_HISTORY_HINT_KEY, '1');
+    setTimeout(hideRememberHistoryHint, 8000);
+  }
+  remember.addEventListener('pointerdown', event => {
+    if (remember.disabled || event.button !== 0 || event.isPrimary === false || activeMemoPointers.size > 0) {
+      cancelRememberPress();
+      rememberClickBlocked = true;
+      return;
+    }
+    rememberClickBlocked = false;
+    const press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    rememberPress = press;
+    press.timer = setTimeout(() => {
+      if (rememberPress !== press || remember.disabled || activeMemoPointers.size > 1) {
+        cancelRememberPress();
+        return;
+      }
+      rememberClickBlocked = true;
+      clearTimeout(press.timer);
+      rememberPress = null;
+      openMemoHistory();
+    }, REMEMBER_LONG_PRESS_MS);
+  });
+  remember.addEventListener('contextmenu', event => event.preventDefault());
+  remember.addEventListener('blur', cancelRememberPress);
+  remember.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      cancelRememberPress();
+      openMemoHistory(remember, document.getElementById('memo-input'), null, event.key === 'ArrowUp' ? 'last' : 'first');
+    } else if (event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+    }
+  });
+  new MutationObserver(() => { if (remember.disabled) cancelRememberPress(); }).observe(remember, { attributes: true, attributeFilter: ['disabled'] });
+  document.getElementById('memo-history-close').addEventListener('click', () => closeMemoHistory(true));
+  list.addEventListener('keydown', event => {
+    const choices = Array.from(list.querySelectorAll('button'));
+    const index = choices.indexOf(document.activeElement);
+    if (index < 0) return;
+    let next;
+    if (event.key === 'ArrowDown') next = (index + 1) % choices.length;
+    if (event.key === 'ArrowUp') next = (index + choices.length - 1) % choices.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = choices.length - 1;
+    if (next !== undefined) { event.preventDefault(); choices[next].focus(); }
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !panel.hidden) {
+      event.preventDefault();
+      closeMemoHistory(true);
+    }
+  });
+  document.addEventListener('pointerdown', event => {
+    activeMemoPointers.add(event.pointerId);
+    if (activeMemoPointers.size > 1) cancelRememberPress();
+    if (!panel.contains(event.target) && !memoHistoryTrigger?.contains(event.target)) closeMemoHistory();
+  });
+  document.addEventListener('pointermove', event => {
+    if (!rememberPress || event.pointerId !== rememberPress.id) return;
+    const rect = remember.getBoundingClientRect();
+    if (Math.hypot(event.clientX - rememberPress.x, event.clientY - rememberPress.y) > 10 ||
+      event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) cancelRememberPress();
+  });
+  document.addEventListener('pointerup', event => {
+    activeMemoPointers.delete(event.pointerId);
+    if (rememberPress?.id === event.pointerId) {
+      clearTimeout(rememberPress.timer);
+      rememberPress = null;
+    }
+  });
+  document.addEventListener('pointercancel', event => {
+    activeMemoPointers.delete(event.pointerId);
+    if (rememberPress?.id === event.pointerId) cancelRememberPress();
+  });
+  document.addEventListener('focusin', event => {
+    if (!panel.contains(event.target) && !memoHistoryTrigger?.contains(event.target)) closeMemoHistory();
+  });
+  window.addEventListener('blur', () => { cancelRememberPress(); activeMemoPointers.clear(); closeMemoHistory(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelRememberPress(); activeMemoPointers.clear(); closeMemoHistory(); }
+  });
+  const onScroll = () => { cancelRememberPress(); positionMemoHistory(); };
+  window.addEventListener('resize', positionMemoHistory);
+  window.addEventListener('scroll', onScroll, true);
+  window.visualViewport?.addEventListener('resize', positionMemoHistory);
+  window.visualViewport?.addEventListener('scroll', onScroll);
+}
+
 // === 撤回/恢复功能 ===
 function undoLastRecord() {
   if (!intervals.length) {
@@ -748,6 +1019,29 @@ window.onload = () => {
 
 // === 🔤 全局多语言提示表 ===
 const i18n = {
+  memoHistoryLabel: {
+    zh: '最近事项',
+    mix: '最近事项',
+    en: 'Recent items'
+  },
+  rememberWithHistory: {
+    zh: '记下；长按或按向下键打开最近事项',
+    mix: '记下；长按或按向下键打开最近事项',
+    en: 'Remember; hold or press Arrow Down for recent items'
+  },
+  rememberHistoryHint: {
+    zh: '轻点记下 · 长按或按 ↓ 查看最近事项',
+    mix: '轻点记下 · 长按或按 ↓ 查看最近事项',
+    en: 'Tap to remember · Hold or press ↓ for recent items'
+  },
+  closeRecentItems: {
+    zh: '关闭最近事项', mix: '关闭最近事项', en: 'Close recent items'
+  },
+  noActiveRecords: {
+    zh: '没有未撤回的记录可导出',
+    mix: '没有未撤回的记录可导出',
+    en: 'No active records to export'
+  },
   noRecords: {
     zh: '没有记录可导出',
     mix: '没有记录可导出',
@@ -1477,6 +1771,13 @@ function importBackupFromCSV() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initMemoHistory();
+  ['confirm-csv-dialog', 'confirm-clear-dialog'].forEach(id => {
+    const dialog = document.getElementById(id);
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+  });
   initTheme();
   applyUIFontSize(uiFontSize);
   applyUIButtonSize(uiButtonSize);
@@ -2570,6 +2871,69 @@ function catExportSetNote(itemId, value) {
       width: 100%;
       min-width: 0;
     }
+    #memo-input { box-sizing: border-box; min-height: 44px; }
+    #remember-btn { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-y; }
+    #remember-btn, .record-memo-history, .memo-history-choice, #memo-history-close { -webkit-tap-highlight-color: transparent; }
+    #remember-history-hint { color: var(--muted); font-size: 0.8em; margin: 0; }
+    .record-memo-entry { display: flex; align-items: stretch; gap: 0.4rem; min-width: 0; margin: 0.3rem 0; }
+    .record-memo-entry input { flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; }
+    .record-memo-history { flex: 0 0 44px; height: auto; min-height: 44px; padding: 0; background: transparent; border-color: transparent; color: var(--muted); }
+    .record-memo-history:hover, .record-memo-history[aria-expanded="true"] { background: var(--panel-2); border-color: var(--border); color: var(--text); }
+    .record-memo-history:disabled { opacity: 0.4; cursor: default; }
+    .memo-history-panel {
+      position: fixed;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      overflow: hidden;
+      background: var(--dialog-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--dialog-shadow);
+    }
+    .memo-history-panel[hidden] { display: none; }
+    .memo-history-heading { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.65rem; }
+    .memo-history-heading strong { font-size: var(--ui-button-font-size); }
+    #memo-history-close { width: 36px; height: 36px; min-height: 36px; padding: 0; background: transparent; border-color: transparent; font-size: 22px !important; }
+    .memo-history-note { flex: 0 0 auto; margin: 0; padding: 0.35rem 0.8rem 0.55rem; color: var(--muted); font-size: 0.75em; }
+    .memo-history-list { list-style: none; margin: 0; padding: 0.25rem; overflow-y: auto; min-height: 0; }
+    .memo-history-choice {
+      display: block;
+      width: 100%;
+      min-height: 44px;
+      height: auto;
+      padding: 0.65rem 0.6rem;
+      font-family: inherit;
+      text-align: left;
+      background: transparent;
+      border-color: transparent;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .memo-history-choice:hover { background: var(--panel-2); }
+    #memo-history-empty { margin: 0; padding: 0.7rem 0.8rem 0.9rem; color: var(--muted); }
+    #remember-btn:focus-visible, .record-memo-history:focus-visible, #memo-history-close:focus-visible, .memo-history-choice:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .csv-export-dialog {
+      box-sizing: border-box;
+      width: min(92vw, 540px);
+      max-height: 90vh;
+      overflow: auto;
+      padding: 1rem;
+      background: var(--dialog-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--dialog-shadow);
+    }
+    .csv-export-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+    .csv-export-dialog p { line-height: 1.5; margin-top: 0; }
+    .csv-export-actions { display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+    .csv-export-actions button { flex: 1 1 8rem; min-width: 0; }
     .control-row {
       display: flex;
       gap: 0.5rem;
@@ -2687,15 +3051,16 @@ function catExportSetNote(itemId, value) {
     <section id="control-section">
       <input id="memo-input" placeholder="当前记录段的备注..." maxlength="1000">
       <div class="control-row control-row-primary">
-        <button onclick="rememberInterval()" data-zh="📌 记下" data-mix="📌 记下" data-en="📌 Remember">📌 记下</button>
+        <button id="remember-btn" type="button" onclick="handleRememberClick(event)" aria-haspopup="dialog" aria-expanded="false" aria-controls="memo-history-panel" aria-describedby="remember-history-hint" aria-keyshortcuts="ArrowDown ArrowUp" data-zh="📌 记下" data-mix="📌 记下" data-en="📌 Remember">📌 记下</button>
       </div>
+      <p id="remember-history-hint" hidden data-zh="轻点记下 · 长按或按 ↓ 查看最近事项" data-mix="轻点记下 · 长按或按 ↓ 查看最近事项" data-en="Tap to remember · Hold or press ↓ for recent items">轻点记下 · 长按或按 ↓ 查看最近事项</p>
       <div class="control-row control-row-secondary">
         <button id="undo-last-btn" onclick="undoLastRecord()" data-zh="↩️ 撤回上一条" data-mix="↩️ 撤回上一条" data-en="↩️ Undo Last">↩️ 撤回上一条</button>
         <button id="redo-last-btn" onclick="redoLastRecord()" data-zh="↪️ 恢复上一条" data-mix="↪️ 恢复上一条" data-en="↪️ Redo Last">↪️ 恢复上一条</button>
       </div>
       <div class="control-row control-row-secondary">
-        <button onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
-        <button onclick="exportIntervalsToCSV()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
+        <button id="export-clear-btn" type="button" onclick="confirmExportAndClear()" data-zh="📁 导出并清空记录" data-mix="📁 导出并清空记录" data-en="📁 Export & Clear">📁 导出并清空记录</button>
+        <button id="export-csv-btn" type="button" onclick="confirmCsvExport()" data-zh="📤 导出CSV" data-mix="📤 导出CSV" data-en="📤 Export CSV">📤 导出CSV</button>
         <button id="import-records-btn" onclick="openImportDialog()" data-zh="📥 导入记录" data-mix="📥 导入记录" data-en="📥 Import Records" style="display:none">📥 导入记录</button>
       </div>
       <input type="file" id="import-file-input" style="display:none" accept=".csv,.json" onchange="handleFileSelect(event)">
@@ -2805,11 +3170,30 @@ function catExportSetNote(itemId, value) {
 
   </div>
 
-  <div id="confirm-clear-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); position:fixed; top:30%; left:30%; z-index:9999; box-shadow:var(--dialog-shadow);">
-    <p data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
-    <button onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
-    <button onclick="document.getElementById('confirm-clear-dialog').style.display='none'" data-zh="❌ 取消" data-mix="❌ 取消" data-en="❌ Cancel">❌ 取消</button>
+  <div id="memo-history-panel" class="memo-history-panel" role="dialog" aria-modal="false" aria-labelledby="memo-history-title" hidden>
+    <div class="memo-history-heading">
+      <strong id="memo-history-title" data-zh="最近事项" data-mix="最近事项" data-en="Recent items">最近事项</strong>
+      <button id="memo-history-close" type="button" aria-label="关闭最近事项">×</button>
+    </div>
+    <ul id="memo-history-list" class="memo-history-list"></ul>
+    <p id="memo-history-empty" data-zh="暂无最近事项" data-mix="暂无最近事项" data-en="No recent items yet">暂无最近事项</p>
+    <p class="memo-history-note" data-zh="选择后可编辑 · 滚动查看更多" data-mix="选择后可编辑 · 滚动查看更多" data-en="Select to edit · Scroll for more">选择后可编辑 · 滚动查看更多</p>
   </div>
+
+  <dialog id="confirm-csv-dialog" class="csv-export-dialog" aria-labelledby="confirm-csv-message">
+    <p id="confirm-csv-message" data-zh="是否下载 CSV？记录会保留。" data-mix="是否下载 CSV？记录会保留。" data-en="Download CSV? Your records will be kept.">是否下载 CSV？记录会保留。</p>
+    <div class="csv-export-actions">
+      <button type="button" onclick="document.getElementById('confirm-csv-dialog').close()" autofocus data-zh="取消" data-mix="取消" data-en="Cancel">取消</button>
+      <button id="confirm-csv-download" type="button" onclick="exportConfirmedCSV()" data-zh="下载 CSV" data-mix="下载 CSV" data-en="Download CSV">下载 CSV</button>
+    </div>
+  </dialog>
+  <dialog id="confirm-clear-dialog" class="csv-export-dialog" aria-labelledby="confirm-clear-message">
+    <p id="confirm-clear-message" data-zh="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-mix="⚠️ 是否要导出所有记录并清空？操作不可撤销。" data-en="⚠️ Export and clear all records? This cannot be undone.">⚠️ 是否要导出所有记录并清空？操作不可撤销。</p>
+    <div class="csv-export-actions">
+      <button type="button" onclick="document.getElementById('confirm-clear-dialog').close()" autofocus data-zh="取消" data-mix="取消" data-en="Cancel">取消</button>
+      <button id="confirm-clear-download" type="button" onclick="exportThenClear()" data-zh="✅ 确认导出并清空" data-mix="✅ 确认导出并清空" data-en="✅ Confirm Export & Clear">✅ 确认导出并清空</button>
+    </div>
+  </dialog>
 
   <div id="backup-reminder-dialog" style="display:none; padding:1em; background:var(--dialog-bg); border:1px solid var(--border); border-radius:10px; position:fixed; top:26%; left:50%; transform:translateX(-50%); z-index:10000; width:min(92vw, 540px); box-shadow:var(--dialog-shadow);">
     <h3 data-zh="⚠️ 备份提醒" data-mix="⚠️ 备份提醒" data-en="⚠️ Backup Reminder">⚠️ 备份提醒</h3>
@@ -2896,14 +3280,37 @@ function catExportSetNote(itemId, value) {
 
   <script>
     function showTab(id) {
+      closeMemoHistory();
       document.querySelectorAll('.tab-content').forEach(div => div.style.display = 'none');
       document.getElementById(id).style.display = 'block';
     }
+    function openCsvExportDialog(id) {
+      if (!intervals.some(item => !item.withdrawn)) {
+        alert(getI18n('noActiveRecords'));
+        return;
+      }
+      closeMemoHistory();
+      const dialog = document.getElementById(id);
+      if (!dialog.open) dialog.showModal();
+      autoFitButtonText();
+    }
+    function confirmCsvExport() {
+      openCsvExportDialog('confirm-csv-dialog');
+    }
     function confirmExportAndClear() {
-      document.getElementById('confirm-clear-dialog').style.display = 'block';
+      openCsvExportDialog('confirm-clear-dialog');
+    }
+    function exportConfirmedCSV() {
+      const dialog = document.getElementById('confirm-csv-dialog');
+      if (!dialog.open) return;
+      dialog.close();
+      exportIntervalsToCSV();
     }
     function exportThenClear() {
-      const exported = exportIntervalsToCSV();
+      const dialog = document.getElementById('confirm-clear-dialog');
+      if (!dialog.open) return;
+      dialog.close();
+      const exported = exportIntervalsToCSV(true);
       if (!exported) return;
       intervals = [];
       undoStack = [];
@@ -2913,7 +3320,6 @@ function catExportSetNote(itemId, value) {
       localStorage.setItem('redoStack', JSON.stringify(redoStack));
       renderIntervals();
       updateUndoRedoButtons();
-      document.getElementById('confirm-clear-dialog').style.display = 'none';
     }
   // 初始化语言状态（优先从 localStorage 读取）
   let currentLang = localStorage.getItem('lang') || 'mix';
@@ -2949,6 +3355,7 @@ function catExportSetNote(itemId, value) {
     if (typeof renderThemePickerOptions === 'function') {
       renderThemePickerOptions();
     }
+    updateMemoHistoryLabels();
   }
 
   function toggleLang() {

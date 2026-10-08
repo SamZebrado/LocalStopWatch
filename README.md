@@ -84,6 +84,31 @@ That second time went way more smoothly. Finally—I got what I wanted 😭
    但脚本目前还有 bug，暂时没修，有空再说吧（逃）🧩  
    But the script still has a bug—I haven’t fixed it yet. Maybe later… 😅
 
+## 🤖 最近事项与 CSV 确认（Recent Items & CSV Confirmation）— 2026-10-08
+
+本次功能由 **CodeX / Codex** 实现与测试，当前为本地待复核改动。
+
+- 主界面轻点「记下」正常记录；长按 550ms 打开最近 10 条不同事项，松手不会再记录。主界面不增加额外按钮。选择后仅回填备注框，仍需轻点「记下」保存。
+- 已有记录的编辑框右侧使用历史时钟图标，标签为「最近事项」。回填该记录后沿用原有输入即保存机制，只修改该条备注，不新增记录、不解析或改变计时。撤回记录的入口禁用。
+- 按记录结束时间从新到旧选取，排除撤回、空白和已清空记录；恢复撤回后重新可选。相同时间优先采用数组中较后的记录。
+- 仅判重时移除尾部「等效」和阿拉伯数字（含小数，可连续出现），显示与回填保留最近一条当前已保存的备注。中间的文字、数字及解析规则保持不变。只剩数字或「等效」的条目用原文判重，避免丢失条目。
+- 焦点在「记下」上时按 ↓ / ↑ 直接打开列表，无需模拟长按；已有记录时钟按钮可用 Enter / Space 激活。首次显示轻提示，后续不反复出现。浮层支持关闭按钮、Esc、外部点击、键盘移动与回填。长备注省略显示，完整回填；浮层最多 264px，按可见视窗调整位置，避免覆盖当前输入框和「记下」。
+- 移动超过 10px、滚动、pointercancel、失焦、双触点或禁用状态会取消待触发的长按，避免松手误记；触屏系统菜单和蓝色点击高亮被抑制。
+- 普通「导出CSV」先确认，文件名仍为 `Uncleared_*.csv`，保留记录。「导出并清空」沿用一层确认，文件名改为 `Cleared_*.csv`，确认后才清空记录与撤回／恢复栈。取消、Esc 或点击弹窗外部均不下载、不清空。浏览器开始下载不代表文件已保存成功，请保管下载文件。
+
+Implemented and tested by **CodeX / Codex**, pending independent review locally. Tap Remember to record; hold it for 550ms or press Arrow Down while focused to open up to ten recent unique active items. Releasing a successful hold never records. Selection fills the main input for editing without saving. Existing record editors have a history-clock button and retain their established input autosave behavior. A one-time hint explains discovery. The compact chooser fits the visible viewport and leaves its target input available. Deduplication removes only trailing “等效” and numeric suffixes from comparison keys; saved text is unchanged. Ordinary CSV export now asks for confirmation and keeps the `Uncleared_` prefix. Export & Clear uses its existing single confirmation with a corrected `Cleared_` prefix. Cancel, Escape, and backdrop dismissal download nothing and preserve data.
+
+验证命令 / Validation:
+
+```sh
+npm test
+npm run test:memo-export-ui
+```
+
+按下方 Development checks 安装仓库已锁定的测试依赖。独立 UI 验证也可用 `PLAYWRIGHT_MODULE` 和 `PLAYWRIGHT_EXECUTABLE_PATH` 指向现有安装；标准 npm 套件使用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 选择现有 Chromium。测试仅使用隔离浏览器内的合成记录，保存桌面／手机截图、合成 CSV 和 `synthetic-preview.html` 到 `test-results/memo-reuse-export/`（可通过 `PREVIEW_DIR` 指定位置）。该 HTML 预览使用内存存储，不读取或修改浏览器中的真实记录；测试结束自动关闭浏览器。
+
+The UI test uses an existing Playwright installation and temporary browser profiles. Its saved standalone HTML preview uses in-memory storage, so opening it does not read or modify real browser records.
+
 ## 🔧 最近更新（Recent Updates） 4.1.2025 lol
 
 花了好多时间，太可怕了，我感觉有点像恶性成瘾了，希望我的学习和研究也能有这股劲头……
@@ -252,8 +277,11 @@ npm run install:playwright
 npm test
 ```
 
-测试覆盖高级模式字号面板和精简模式标签展示；不代表所有导入导出或移动浏览器均已验证。
-The browser suite covers the advanced font panel and simplified-mode tags; it does not validate every import/export path or mobile browser.
+`npm test` 覆盖 CSV 往返、统计、备注判重、长按边界，以及 Chromium 中的字号面板、标签展示、文字显示安全和长按交互。独立 UI 验证补充合成数据的桌面／触屏选择器、CSV 确认与下载。缩小可见视窗已验证；尚未在实体手机软键盘上验证。
+`npm test` covers CSV round trips, statistics, memo deduplication, gesture boundaries, and Chromium checks for font controls, tags, literal rendering and long press. The separate UI script checks desktop/touch selection and actual CSV downloads with synthetic data. Reduced visible viewports are checked; a physical phone keyboard has not been tested.
+
+Playwright 的临时输出隔离在 `test-results/playwright/`，避免每次运行清理同级的预览交付文件。
+Playwright temporary output is scoped to `test-results/playwright/`, preserving sibling preview artifacts between runs.
 
 本仓库尚未声明开源许可证；公开可见不等于授予使用或再分发许可。
 No open-source license is declared in this repository; public visibility does not grant reuse or redistribution rights.

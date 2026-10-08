@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "node tests/csv-roundtrip-test.js && node tests/stats-aggregation-test.js && playwright test",
+    "test": "node tests/csv-roundtrip-test.js && node tests/stats-aggregation-test.js && node tests/memo-history-export-test.js && node tests/remember-gesture-test.js && playwright test",
     "install:playwright": "playwright install chromium",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:memo-export-ui": "node tests/memo-history-export-ui-test.js"
   },
   "devDependencies": {
     "@playwright/test": "1.61.0"
